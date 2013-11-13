@@ -1,0 +1,22 @@
+public void map
+
+terms.clear();
+
+inside DocumentFrequencyMapper
+private final pattern splitPattern = Pattern.comile("\\W+");
+
+
+@combinable   // inside combinable, used for stratosphere
+
+stratosphere/bin/pact-client.sh run -j /pathsd SNAPSHOT jar/task4 ... // source  // target path.file
+
+set 208
+
+see job management log in localhost:8080
+
+hadoop to
+
+
+upload jar;
+enter argument: 1 file:///tutorial-skeleton.txt file:///tutorial-skeleton-result.txt
+run the job;

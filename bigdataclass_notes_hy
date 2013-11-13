@@ -1,0 +1,26 @@
+ An error occurred while invoking the pact program:
+The pact plan assembler class 'eu.stratosphere.tutorial.WeightVectorPlan' was not found in the jar file '/tmp/pact-jobs/stratosphere-tutorial-skeleton-0.1-SNAPSHOT.jar'. 
+
+
+/** run a java job **/
+a jar file must be generated like follows
+go to the path where the pom is located
+type command: mvn clean package
+the jar file will be generated in 'target' folder
+copy this file and paste it to the 'examples/pact/'
+the rest see the ** basic ** part how to run this job
+
+
+/** basic **/
+to launch web interface use: 
+....path containing bin of this project$ ./bin/start-pact-web.sh
+open browser and type http://localhost:8080
+
+fill out arguments on the left hand side: which is of following format: number of doc, source file path, source file, destination file path, destination file
+/* add one document using */
+1 file:///home/haiyan/haiyan_docs/hy_git/stratosphere/stratosphere-dist/target/stratosphere-dist-0.4-ozone-SNAPSHOT-bin/stratosphere-0.4-ozone-SNAPSHOT/hamlet.txt file:///home/haiyan/haiyan_docs/hy_git/stratosphere/stratosphere-dist/target/stratosphere-dist-0.4-ozone-SNAPSHOT-bin/stratosphere-0.4-ozone-SNAPSHOT/result.txt
+
+/* add two documents using */
+2 file:///home/haiyan/haiyan_docs/hy_git/stratosphere/stratosphere-dist/target/stratosphere-dist-0.4-ozone-SNAPSHOT-bin/stratosphere-0.4-ozone-SNAPSHOT/hamlet.txt file:///home/haiyan/haiyan_docs/hy_git/stratosphere/stratosphere-dist/target/stratosphere-dist-0.4-ozone-SNAPSHOT-bin/stratosphere-0.4-ozone-SNAPSHOT/result1.txt file:///home/haiyan/haiyan_docs/hy_git/stratosphere/stratosphere-dist/target/stratosphere-dist-0.4-ozone-SNAPSHOT-bin/stratosphere-0.4-ozone-SNAPSHOT/result2.txt 
+
+output: a folder named result2 is created, it contains two txt files, named 1.txt and 2.txt.
