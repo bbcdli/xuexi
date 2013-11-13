@@ -1,0 +1,39 @@
+close all
+clear
+%load('Z:MATLABSVDatenUebung.mat')  %  ! change to data for ue2
+
+% Aufgabe 1
+
+% p := poles
+[z,p,k] = buttap(9);
+
+% Aufgabe 2
+
+plot(real(p),imag(p),'o'),axis('equal'),grid
+
+
+% Aufgabe 3
+
+w = linspace(0,3,4001);
+
+a = poly(p);
+
+h = freqs(k,a,4001);
+mag = abs(h);
+
+phase = unwrap(angle(h));
+
+
+% Aufgabe 4
+
+subplot(3,1,1), plot(w,mag), grid
+xlabel('Frequenz'); ylabel('1')
+title('Betragsfrequenzgang');
+
+subplot(3,1,2), plot(w,20*log(mag)), grid
+xlabel('Frequenz'); ylabel('dB')
+title('Betragsfrequenzgang');
+
+subplot(3,1,3), plot(w,phase*180/pi), grid
+title('Phasenfrequenzgang');
+xlabel('Frequenz'); ylabel('Grad');

@@ -1,0 +1,78 @@
+close all
+clear
+load('Z:MATLABSVDatenUebung.mat')
+
+
+% Aufgabe 2.a
+
+tic
+produkt=x.*y;
+t1=toc
+l=length(x);
+sProduct = zeros(size(x));
+tic
+for n = 1:l
+    product(n) = x(n)*y(n);
+end
+t2=toc
+t2/t1
+
+% Aufgabe 2.b
+
+product = x(91:102)*y(91:102)';
+
+% Aufgabe 3.a
+
+e1 = z-a1; e2 = z-a2; e3 = z-a3;
+
+fprintf('%d; ',round(e1));
+fprintf('n');
+fprintf('%d; ',round(e2));
+fprintf('n');
+fprintf('%d; ',round(e3));
+fprintf('n  n');
+
+% Aufgabe 3.b
+figure(1);
+subplot(2,3,1), plot(a1); hold on; plot(z,'-r'); hold off;
+title('Approx. a1');
+subplot(2,3,2), plot(a2); hold on; plot(z,'-r'); hold off;
+title('Approx. a2');
+subplot(2,3,3), plot(a3); hold on; plot(z,'-r'); hold off;
+title('Approx. a3');
+
+subplot(2,3,4), plot(e1);
+title('Error e1');
+subplot(2,3,5), plot(e2);
+title('Error e2');
+subplot(2,3,6), plot(e3);
+title('Error e3');
+
+% Aufgabe 3.c
+
+l = length(e2);
+
+L1 =0;
+for n = 1:l
+    L1 = L1 + abs(e2(n));
+end
+L1n = norm(e2,1);
+fprintf('L1 = %d; norm: %d n', L1,L1n);
+fprintf('n');
+
+L2 =0;
+for n = 1:l
+    L2 = L2 + pow2(e2(n));
+end
+L2n = norm(e2,2);
+L2 = sqrt(L2);
+fprintf('L2 = %d; norm: %d n', L2,L2n);
+fprintf('n');
+
+% for n = 1:l
+%    L3 = L3 + pow2(e2(n));
+% end
+LInfn = norm(e2,Inf);
+LInf = max(e2);
+
+fprintf('LInf = %d; norm: %d n', LInf,LInf);
