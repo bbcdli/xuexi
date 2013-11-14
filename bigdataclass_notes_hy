@@ -24,3 +24,313 @@ fill out arguments on the left hand side: which is of following format: number o
 2 file:///home/haiyan/haiyan_docs/hy_git/stratosphere/stratosphere-dist/target/stratosphere-dist-0.4-ozone-SNAPSHOT-bin/stratosphere-0.4-ozone-SNAPSHOT/hamlet.txt file:///home/haiyan/haiyan_docs/hy_git/stratosphere/stratosphere-dist/target/stratosphere-dist-0.4-ozone-SNAPSHOT-bin/stratosphere-0.4-ozone-SNAPSHOT/result1.txt file:///home/haiyan/haiyan_docs/hy_git/stratosphere/stratosphere-dist/target/stratosphere-dist-0.4-ozone-SNAPSHOT-bin/stratosphere-0.4-ozone-SNAPSHOT/result2.txt 
 
 output: a folder named result2 is created, it contains two txt files, named 1.txt and 2.txt.
+
+Scala - powerpoint Slides
+//pg.22 Anatomy of a Scala Class
+package foo.bar
+import sth.else
+class Job(arg1:Int) {
+	def map(in: Int): String = {
+		val i: Int = in +2
+		var a = "Hello"
+		i.toString
+		}
+	}
+	
+//pg.23 Singletons, similar to java singletons and/or static methods
+object Job {
+	def main(args: String*) {
+		println("Hello World")
+	}
+}
+
+//pg.24 Collections
+val a = Seq(1,2,4)
+	List("Hallo", 2)
+	Array(2,3)
+	Map(1->"1", 2->"2")
+val b = a map { x => x+2 }
+val c = a map { _ +2 }
+val c = a.map({_+2})
+
+//pg.25 Generics and Tuples
+val a: Seq[Int] = Seq(1,2,4)
+val tup = (3, "a")
+val tup2: (Int, String) = (3, "a")
+
+//pg.26 (Part separator) Stratosphere Scala Front End
+
+//pg.27 Skeleton of a Straosphere Program
+Input: a text file/JDBC source/CSV, etc.
+	- loaded in internal representation: the DataSet
+Transformations on the Dataset
+	- map, reduce, join, etc
+Output: program results in a DataSink
+	Text file, JDBC, CSV, etc
+//pg.28 The Almighty DataSet
+Operations are methodds on DataSet[A]
+Working with DataSet[A] feels like working with Scala collections
+DataSet[A] is not an actual collection but represents computation on a collection
+Stringing together operations creates a data flow graph that can be execute
+
+//pg.29 An important difference
+//immediatedly executed
+val input: List[String] = ...
+val mapped = input.map{ s=>(s,1)}
+
+//executed when data flow is executed
+val input: DataSet(String) = ...
+val mapped = input.map{ s=>(s,1)}
+val result = mapped.write("file", ...)
+val plan = new Plan(result)
+execute(plan)
+
+//pg.30 Usable Data Types
+primitive types
+tuples
+case classes
+custom data types that implement the value interface
+
+//pg.31 Creating Data Sources
+val input = TextFile("file://")
+val input: DataSet[(Int, String)] = DataSource("hdfs://", CsvInputFormat[(Int, String)])())
+def parseInput(line: String):(Int, Int) = {...}
+val input = DataSource("hdfs://", DelimitedInputFormat[parseInput])
+
+//pg.32 Interlude: Anonymous Functions
+var fun: ((Int, String)) => String = ...
+fun = { t=> t._2 }
+fun = { _._2 }
+fun = { case(i, w) => w }
+
+//pg.33 Map
+val input: DataSet[(Int, String)] = ...
+val mapper = input.map{ case(a,b) => (a+2, b)}
+val mapper2 = input.flatMap{ _._2.split("") }
+val filtered = input.filter{ case (a,b) => a> 3 }
+
+//pg.34 Reduce
+val input: DataSet[(String, Int)] = ...
+val reducer = input
+		.groupBy{ case (w, _) => w}
+		.groupReduce { _.minBy { ... }}
+val reducer2 = input
+		.groupBy { case(w, _) => w }
+		.reduce{ (w1, w2) => (w1._1, w1._2 + w2._2)}
+		
+//pg.35 Cross
+val left: DataSet[(String, Int)] = ...
+val right: DataSet[(String, Int)] = ...
+val cross = left cross right
+			.map{ (l,r) => ... }
+val cross = left cross right
+			.flatMap{ (l,r) => ... }
+		
+//pg.36 Join (Match)
+val counts: DataSet[(String, Int)] = ...
+val names: DataSet[(Int, String)] = ...
+val join = counts
+		.join(right)
+		.where{ case (_, c) => c}.isEqualsTo{ case (n,_) => n}
+		.map{ (l,r) => (l._1, r._2)}
+val join = counts
+		.join(right)
+		.where{ case (_, c) => c}.isEqualsTo{ case (n,_) => n}
+		.flatMap{ (l,r) => ... }
+		
+//pg.37 CoGroup
+val counts: DataSet[(String, Int)] = ..
+val names: DataSet[(Int, String)] = ...
+val cogroup = counts
+			.cogroup(right)
+			.where{ case (_,c) => c}.isEqualsTo { case (n,_) => n}
+			.map {(l,r) => (l.minBy {...}, r.minBy {...})}
+val cogroup = counts
+			.cogroup(right)
+			.where { case (_,c) => c}.isEqualsTo { case (n,_) => n}
+			.flatMap {(l,r) => ...}
+		
+//pg.38 Creating Data Sinks
+val counts: DataSet[(Stirng, Int)]		
+val sink = counts.write("<>", CsvOutputFormat())
+def formatOutput(a: (String, Int)): String = { "Word " + a._1 + "count " + a._2 }
+val sink = counts.write("<>", DelimitedOutputFormat(formatOutput))
+
+//pg.39 Word Count example
+val input = TextFile(textInput)
+val words = input
+			.flatMap { _.split(" ") map {(_,1)}}
+val counts = words
+			.groupBy { case (word, _) => word }
+			.reduce { (w1,w2) => (w1._1, w1._2 + w2._2) }
+val output = counts
+			.write(wordsOutput, CsvOutputFormat())
+val plan = new ScalaPlan(Seq(output))
+		
+		
+// Slides on interactive tour of scala
+//pg.18
+//Loops using while  
+
+var i, sum = 0  
+while ( i < 10) {  
+  sum += i  
+  i+=1  
+}  
+println(sum)  
+
+//pg.19
+//Loops using for  
+var sum = 0  
+for ( i <- 0 until 10) {  
+  sum += i  
+}  
+println(sum)  
+
+//pg.20
+//Or, neither while nor for  
+(0 until 10).sum
+
+//pg.21
+if (true)   
+  println("no braces on a single expression")  
+
+if (1 + 1 == 2) {  
+  println("multiple")  
+  println("statements")  
+  println("require")  
+  println("braces")  
+} else {  
+  println("new math is found!")  
+  println("or your CPU went crazy")  
+}  
+
+val likeEggs = false  
+val breakfast =  
+  if (likeEggs) "scrambled eggs"  
+  else "Apple"  
+
+println(breakfast)  
+
+//pg.22
+val selection = "One"  
+selection match {  
+  case "One" => println("You selected option one!")  
+  case "Two" => println("You selected option two!")  
+  case _ => println("You selected something else: ")  
+}  
+
+//pg.23
+Arrays are constructed simply using Array(element1, element2, ...)
+Arrays in Scala map to Java primitive Arrays (e.g. Java's int[] is Scala's Array[Int], Java's String[] is Array[String] in Scala)
+Arrays are mutable (can't change it's size once created, but can modify it's elements)
+Since they are using Java's arrays, to print nicely an Array's content, use .mkString(",")
+
+Array elements can be of any type, but the Array's final type will be the lowest common denominator 
+
+val array1 = Array(1, 2, 3) //Mutable array of type Array[Int]  
+val array2 = Array("a", 2, true) //Mutable array of type Array[Any]  
+val array3 = Array("a", "b", "c") //Mutable array of type Array[String]  
+
+//Access items using (index) not [index]  
+val itemAtIndex0 = array3(0)   
+println(itemAtIndex0) // a  
+
+//Modify items the same way  
+array3(0) = "d"  
+println(array3.mkString(",")) //d,b,c  
+
+//Concatenation using the ++ operator  
+val concatenated = array1 ++ array2   
+println(concatenated.mkString(",")) // 1,2,3,a,2,true  
+
+//Finding an index of an item  
+array3.indexOf("b") // 1  
+
+//Diff  
+val diffArray = Array(1,2,3,4).diff(Array(2,3))  
+println(diffArray.mkString(",")) // 1,4  
+
+//Find (stops when item is found)  
+val personArray = Array(("Alice",1), ("Bob",2), ("Carol",3))  
+def findByName(name:String) = personArray.find(_._1 == name).getOrElse(("David",4))  
+val findBob = findByName("Bob")  
+val findEli = findByName("Eli")  
+
+println(findBob._2) //2  
+println(findEli._2) //4  
+
+//pg.25
+
+    Sets are constructed simply using Set(element1, element2, ...)
+    The Set can contain mixed types, but the final type of the elements will be the lowest common denominator
+    The default Set is Predef.Set which points to scala.collection.immutable.Set
+    As it currently stands, Set implementation up to size of 4 has a specific class Set1, Set2, Set3, Set4, beyond that, it uses an immutable HashSet
+    You can't have duplicate values, adding a value that already exists overwrites the value
+    Order of iteration is not guaranteed to be consistent
+
+val set1 = Set(1, 2, 3) //Immutable set of type Set[Int]  
+val set2 = Set("a", 2, true) //Immutable list of type Set[Any]  
+import collection.mutable  
+val mset = mutable.HashSet("a", "b", "c") //the "mutable version" of Set  
+
+//Sets remove duplicates   
+println(Set(1,2,3,2,4,3,2,1,2)) //Set(1, 2, 3, 4)  
+
+//Check if item exists using (item)   
+val oneExists = set1(1)  
+val fourExists = set1(4)  
+println(oneExists) // true  
+println(fourExists) // false  
+
+//You can "modify" items the same way as for Lists  
+//(DON'T use it this way, use mset -="a" instead)  
+mset("a") = false   
+println(mset) //Set(c, b)  
+
+//Concatenation using the ++ operator   
+//(removes duplicates, order not guaranteed)  
+val concatenated = set1 ++ set2 ++ mset  
+println(concatenated) // Set(1, a, true, 2, b, 3, c)  
+//Concatenation doesn't modify the sets themselves   
+println(set1) //Set(1, 2, 3)  
+
+//Removing elements (mutable Sets only)  
+mset -= "c"  
+println (mset) //Set("b")  
+
+//Adding elements (mutable Lists only)  
+mset += "e"  
+mset ++= Set("f", "g")  
+
+println (mset) //Set(f, g, e, b)  
+
+//Diff  
+val diffSet = Set(1,2,3,4) diff Set(2,3)  
+println(diffSet) // Set(1, 4)  
+
+//Find (stops when item is found)  
+
+//Note that this is not an ideal use for Set,   
+//a Map would be much better data structure  
+//Just for illustration purposes   
+val personSet = Set(("Alice",1), ("Bob",2), ("Carol",3))  
+def findByName(name:String) = personSet.find(_._1 == name).getOrElse(("David",4))  
+val findBob = findByName("Bob")  
+val findEli = findByName("Eli")  
+
+println(findBob._2) //2  
+println(findEli._2) //4  
+
+
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+					
