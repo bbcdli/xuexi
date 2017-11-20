@@ -1,0 +1,3132 @@
+import time
+from datetime import datetime
+from docutils.nodes import inline
+
+import scipy.misc as misc
+from PIL import Image
+from random import randint
+import tensorflow as tf
+import os
+import cv2
+import urllib
+import numpy as np
+from bs4 import BeautifulSoup #sudo pip install beautifulsoup4
+import urllib2
+PROJ_DIR = '/home/haiyan/Documents/MA/'
+import tools_classifier_seg as tools
+
+
+'''
+useful notes and examples:
+
+#example: visualize digit data with TSNE (t-distributed stochastic neighbor embedding) algorithm
+# That's an impressive list of imports.
+import numpy as np
+
+# We import sklearn.
+from sklearn.manifold import TSNE
+from sklearn.datasets import load_digits
+
+# We'll hack a bit with the t-SNE code in sklearn 0.15.2.
+# Random state.
+RS = 20150101
+
+# We'll use matplotlib for graphics.
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as PathEffects
+
+# We import seaborn to make nice plots.
+import seaborn as sns
+sns.set_style('darkgrid')
+sns.set_palette('muted')
+sns.set_context("notebook", font_scale=1.5,
+                rc={"lines.linewidth": 2.5})
+
+# We'll generate an animation with matplotlib and moviepy.
+
+digits = load_digits()
+digits.data.shape
+
+# We import seaborn to make nice plots.
+import seaborn as sns
+sns.set_style('darkgrid')
+sns.set_palette('muted')
+sns.set_context("notebook", font_scale=1.5,
+                rc={"lines.linewidth": 2.5})
+
+print(digits['DESCR'])
+
+nrows, ncols = 2, 5
+plt.figure(figsize=(6,3))
+plt.gray()
+for i in range(ncols * nrows):
+    ax = plt.subplot(nrows, ncols, i + 1)
+    ax.matshow(digits.images[i,...])
+    plt.xticks([]); plt.yticks([])
+    plt.title(digits.target[i])
+plt.savefig('../digits-generated.png', dpi=150)
+
+
+# We first reorder the data points according to the handwritten numbers.
+X = np.vstack([digits.data[digits.target==i] for i in range(10)])
+y = np.hstack([digits.target[digits.target==i] for i in range(10)])
+
+digits_proj = TSNE(random_state=RS).fit_transform(X)
+
+def scatter(x, colors):
+    # We choose a color palette with seaborn.
+    palette = np.array(sns.color_palette("hls", 10))
+
+    # We create a scatter plot.
+    f = plt.figure(figsize=(8, 8))
+    ax = plt.subplot(aspect='equal')
+    sc = ax.scatter(x[:,0], x[:,1], lw=0, s=40,
+                    c=palette[colors.astype(np.int)])
+    plt.xlim(-25, 25)
+    plt.ylim(-25, 25)
+    ax.axis('off')
+    ax.axis('tight')
+
+    # We add the labels for each digit.
+    txts = []
+    for i in range(10):
+        # Position of each label.
+        xtext, ytext = np.median(x[colors == i, :], axis=0)
+        txt = ax.text(xtext, ytext, str(i), fontsize=24)
+        txt.set_path_effects([
+            PathEffects.Stroke(linewidth=5, foreground="w"),
+            PathEffects.Normal()])
+        txts.append(txt)
+
+    return f, ax, sc, txts
+
+scatter(digits_proj, y)
+plt.savefig('../digits_tsne-generated.png', dpi=120)
+
+
+#example: visualize some typical distribution with TSNE
+# Author: Narine Kokhlikyan <narine@slice.com>
+# License: BSD
+
+print(__doc__)
+
+#import numpy as np
+
+from matplotlib.ticker import NullFormatter
+import matplotlib.pyplot as plt
+from sklearn import manifold, datasets
+from time import time
+
+n_samples = 300
+n_components = 2
+(fig, subplots) = plt.subplots(3, 5, figsize=(15, 8))
+perplexities = [5, 30, 50, 100]
+
+X, y = datasets.make_circles(n_samples=n_samples, factor=.5, noise=.05)
+
+red = y == 0
+green = y == 1
+
+ax = subplots[0][0]
+ax.scatter(X[red, 0], X[red, 1], c="r")
+ax.scatter(X[green, 0], X[green, 1], c="g")
+ax.xaxis.set_major_formatter(NullFormatter())
+ax.yaxis.set_major_formatter(NullFormatter())
+plt.axis('tight')
+
+for i, perplexity in enumerate(perplexities):
+    ax = subplots[0][i + 1]
+
+    t0 = time()
+    tsne = manifold.TSNE(n_components=n_components, init='random',
+                         random_state=0, perplexity=perplexity)
+    Y = tsne.fit_transform(X)
+    t1 = time()
+    print("circles, perplexity=%d in %.2g sec" % (perplexity, t1 - t0))
+    ax.set_title("Perplexity=%d" % perplexity)
+    ax.scatter(Y[red, 0], Y[red, 1], c="r")
+    ax.scatter(Y[green, 0], Y[green, 1], c="g")
+    ax.xaxis.set_major_formatter(NullFormatter())
+    ax.yaxis.set_major_formatter(NullFormatter())
+    ax.axis('tight')
+
+# Another example using s-curve
+X, color = datasets.samples_generator.make_s_curve(n_samples, random_state=0)
+
+ax = subplots[1][0]
+ax.scatter(X[:, 0], X[:, 2], c=color, cmap=plt.cm.viridis)
+ax.xaxis.set_major_formatter(NullFormatter())
+ax.yaxis.set_major_formatter(NullFormatter())
+
+for i, perplexity in enumerate(perplexities):
+    ax = subplots[1][i + 1]
+
+    t0 = time()
+    tsne = manifold.TSNE(n_components=n_components, init='random',
+                         random_state=0, perplexity=perplexity)
+    Y = tsne.fit_transform(X)
+    t1 = time()
+    print("S-curve, perplexity=%d in %.2g sec" % (perplexity, t1 - t0))
+
+    ax.set_title("Perplexity=%d" % perplexity)
+    ax.scatter(Y[:, 0], Y[:, 1], c=color, cmap=plt.cm.viridis)
+    ax.xaxis.set_major_formatter(NullFormatter())
+    ax.yaxis.set_major_formatter(NullFormatter())
+    ax.axis('tight')
+
+
+# Another example using a 2D uniform grid
+x = np.linspace(0, 1, int(np.sqrt(n_samples)))
+xx, yy = np.meshgrid(x, x)
+X = np.hstack([
+    xx.ravel().reshape(-1, 1),
+    yy.ravel().reshape(-1, 1),
+])
+color = xx.ravel()
+ax = subplots[2][0]
+ax.scatter(X[:, 0], X[:, 1], c=color, cmap=plt.cm.viridis)
+ax.xaxis.set_major_formatter(NullFormatter())
+ax.yaxis.set_major_formatter(NullFormatter())
+
+for i, perplexity in enumerate(perplexities):
+    ax = subplots[2][i + 1]
+
+    t0 = time()
+    tsne = manifold.TSNE(n_components=n_components, init='random',
+                         random_state=0, perplexity=perplexity)
+    Y = tsne.fit_transform(X)
+    t1 = time()
+    print("uniform grid, perplexity=%d in %.2g sec" % (perplexity, t1 - t0))
+
+    ax.set_title("Perplexity=%d" % perplexity)
+    ax.scatter(Y[:, 0], Y[:, 1], c=color, cmap=plt.cm.viridis)
+    ax.xaxis.set_major_formatter(NullFormatter())
+    ax.yaxis.set_major_formatter(NullFormatter())
+    ax.axis('tight')
+
+plt.show()
+
+
+
+
+
+#resize and save images
+path = '/home/haiyan/Documents/MA/Test_Images/MA/test_represent/6classifier_no_gt_seg_clear/'
+folders = ['vorn/']
+for f in folders:
+	ims = [s for s in os.listdir(path+f)]
+	for im in ims:
+		img = cv2.imread(path+f+im)
+		f_name,ext = os.path.splitext(im)
+		img = cv2.resize(img,(320,320),interpolation=cv2.INTER_CUBIC)
+		cv2.imwrite(path+f+f_name+'_upsample_same_scale.jpg',img)
+		
+		
+#convert to image
+open_cv_image = cv2.resize(np.uint8(open_cv_image), (h, w))
+convert array to cv2 image
+b[:,:,0] = numpy.ones([200,200])*255
+b[:,:,1] = numpy.ones([200,200])*255
+b[:,:,2] = numpy.ones([200,200])*0
+cv2.imwrite('color_img.jpg', b)
+
+#check mask values
+p = '/home/haiyan/Documents/MA/Data/MA_cad/training/others/2images_6cl/'
+p2 = '/home/haiyan/Documents/MA/Data/MA_cad/training/others/2masks_6cl_ex_ring/'
+flist = [s for s in os.listdir(p2) if '_011' in s]
+im = misc.imread(p2+flist[0])
+im = np.float32(im)
+im_float = im / 255.
+
+im_float = np.uint8(np.array(im))
+misc.imshow(im_float)
+
+im_float = np.uint8(np.array(im))
+#misc.imshow(im_float)
+#im_float_exp = np.expand_dims(im_float, 2).astype(np.float32)
+res_count=tools.count_diff_pixel_values(im_float,320,320)
+#print res_count
+dim = len(im_float.shape)
+print 'dim:', dim, res_count
+im_float_p = np.zeros((1 , 320, 320, dim))
+thresh_res_at,ceiling_to_pixel_value = 120, 255
+idx = im_float[:, :] > thresh_res_at
+im_float[idx] = ceiling_to_pixel_value
+cv2.imshow('fl',im_float)
+cv2.imwrite('../ma_vggfcn_pred_th.png',im_float)
+cv2.waitKey()
+          
+if dim == 3:
+  im_float_p = im_float[10][10][1]
+if dim == 2:
+  im_float_p = im_float[10][10]
+print im_float.shape #, im_float_p
+for i in xrange(100,110):
+  for j in xrange(100,110):
+    if dim == 3:
+      print im_float[i][j][0],
+    if dim == 2:
+      print im_float[i][j],
+
+
+#copy part images to another folder if their masks are selected
+p = '/home/haiyan/Documents/MA/Data/MA_cad/training/others/3masks_gimp/'
+p2 = '/home/haiyan/Documents/MA/Data/MA_r_pub/ADEChallengeData2016/training/images/'
+p_des = '/home/haiyan/Documents/MA/Data/MA_r_pub/ADEChallengeData2016/training/annotations/'
+list1 = [s for s in os.listdir(p)]
+#print list1
+list2 = [s for s in os.listdir(p2) if 'cad' in s]
+list_im_name = []
+for item,j in zip(list1,list2):
+    name = j.replace('_im','_m')
+    name,ext = os.path.splitext(name)
+    #name = name[:-7]
+    list_im_name.append(name)
+    #print name,
+
+for item in list_im_name:
+  for j in list1:
+    jn, ext = os.path.splitext(j)
+    if jn == item:
+      print 'item',item,
+      cmd = 'cp '+p+j+' '+p_des
+      #print 'cmd:',cmd
+      os.system(cmd)
+    
+#draw contour with given rectangular coordinates
+data_path = PROJ_DIR + '/Data/MA_cad/training/'
+im_path = data_path + 'others/2images_6cl/'
+label_path = data_path + 'others/2masks_6cl/'
+
+black = np.zeros((320,320,3),np.uint8)
+r1,r2,c1,c2 = 0,50,0,80
+area = [[c1,r1],[c2,r1],[c2,r2],[c1,r2]]
+ctr = np.array(area).astype(np.int32)
+cv2.rectangle(black, (c1, r1), (c2, r2), color=(0, 255, 0), thickness=2)
+cv2.drawContours(black, [ctr], 0, (255, 255, 255, 255), -1)
+cv2.imshow('blk_area',black)
+#cv2.imshow('blk_area',black)
+cv2.waitKey()
+########################################################
+
+#   os.path.dirname(a_file_w_path) --- output path
+# 1 != 1 # false
+# 1 <> 1 # false
+# [] is [] # false (distinct objects)
+# a = b = []; a is b # true (same object)
+
+# check folder contains filename with pattern
+# for f in os.listdir(OUTPUT_PATH +'/'):
+# if re.search('/*flipped*.*', f):
+
+https://pixlr.com/editor/
+from PIL import Image #hy: create video with images
+activation_test_img = Image.open('../hintenTest.jpg')
+activation_test_img.show()
+activation_test_img.save('../hintenTest2.jpg')
+
+
+img = Image.open('../tmp/resized/rechts/rechts_t2_1_rz400_d0_0400_1.jpg')
+bigsize = (img.size[0]*3, img.size[1]*3)
+mask = Image.new('L', bigsize, 0)
+
+draw = ImageDraw.Draw(mask)
+
+draw.ellipse((0,0) + bigsize, fill=30)
+
+mask = mask.resize(img.size, Image.ANTIALIAS)
+#bg = ImageOps.fit(bgOri,mask.size, centering=(0.5,0.5))
+img.putalpha(mask)
+#print 'bg size', bg.shape()
+img.save('../1_bg.jpg')
+
+
+bg_in = cv2.imread('../tmp/resized/rechts/rechts_t2_1_rz400_d0_0400_1.jpg')
+for alpha in np.arange(0,1.1, 0.1)[::-1]:
+    back = Image.new('RBGA', bg_in.size)
+    back.paste(bg_in)
+    poly = Image.new('RGBA', (400,400))
+    pdraw = ImageDraw.Draw(poly)
+
+    back.paste(poly, (0,0), mask=poly)
+
+    back.paste(back
+    #bg = Image.fromarray(bg_out)
+a='vorn//_lila_bg_3_1_ex1051_22.jpg'
+if 'lila' in a:
+    print 'ja'
+a=[-0.900004,-0.8,3.4]
+print list(sorted(map(abs,a)))
+print sorted(map(abs,(a)))
+sum = np.zeros((3, 1), dtype=np.float32)
+sum_2 = np.zeros((3, 1), dtype=np.float32)
+print sum[:,0]
+scores = [[6, 0, 4],[9, 52, 53],[2, 3, 4]]
+for i in range (1,2):
+    print i
+    print np.exp(scores[1])
+    sum[:, 0] = sum[:, 0] + np.exp(scores[i])
+    sum_2[:, 0] += sum_2[:, 0] + np.exp(scores[i])
+print 'sum', sum[:,0]
+print 'sum', sum_2[:,0]
+
+
+##########################
+confMat = [[6, 0, 4],
+           [9, 52, 53],
+           [2, 3, 4]]
+#confMat = np.array([[6, 0, 4], [9, 52, 3], [2, 3, 4]])
+confMat = np.array(confMat)
+
+# confMat = [0.9,0,0]
+
+max_of_cols = []
+max_of_rows = []
+print '\nrow'
+for i in xrange(0, 3):
+  max_of_row = max(confMat[i, :])
+  max_of_row_ind = np.where(confMat[i, :] == max_of_row)
+  print 'max index:', max_of_row_ind
+  max_of_rows.append(max_of_row)
+  max_of_col = max(confMat[:, i])
+  max_of_cols.append(max_of_col)
+  if max_of_row == max_of_col:
+    print max_of_row
+
+print '\ncol'
+for i in xrange(0, 3):
+  max_of_col = max(confMat[:, i])
+  max_of_cols.append(max_of_col)
+  print max_of_col
+
+bg_in = cv2.imread('../Test_Images/hinten_ori1_rz400.jpg')
+overlay = np.zeros([400, 400, 3], dtype=np.uint8)
+bg_out = overlay.copy()
+cv2.rectangle(overlay, (0, 0), (400, 400), color=(60, 80, 30, 3))
+alpha = 0.7    #hy: parameter for degree of transparency
+cv2.addWeighted(overlay, alpha, bg_in, 1-alpha, 0, bg_out)
+print 'bg_out', bg_out
+bg = Image.fromarray(bg_out)
+bg.save('bg_set.jpg')
+import os
+trained_model = '../path/model_GD360_h184_w184_c6_3conv_L0.7_O1.0_U1.0_7_0.71-6381.meta'
+n = trained_model.split('conv')[1][0:3]
+print 'n',n
+import tensorflow as tf
+
+x = tf.placeholder(tf.float32, 3, name="p")
+#x = tf.placeholder("float", 3)
+y = x * 2
+
+with tf.Session() as session:
+    result = session.run(y, feed_dict={x: [1, 2, 3]})
+    print(result)
+
+  # Note: for operation of overlay we need to use image w=h
+  # Note: when use overlay of uint type, we can use clip to convert an image to int32 then to uint8
+
+	bg_ori = cv2.imread(crop_dest_path + 'bg_office2_1_ex418_0.jpg')
+	bg_ori = cv2.resize(bg_ori,(w,h))
+	h,w,ch = bg_ori.shape
+
+	bg_ori = np.asarray(bg_ori, np.int32)
+	np.clip(bg_ori, 0, 255, out=bg_ori)
+	overlay = bg_ori.astype('uint8')
+	#overlay = np.zeros([h, w, ch], dtype=np.uint8)
+	test_img_transparent = overlay.copy()
+
+	cv2.rectangle(overlay, (0, 0), (h, w), color=(60, 80, 30, ch))
+	alpha = 0.2  # hy: parameter for degree of transparency
+	cv2.addWeighted(overlay, alpha, test_img_obj_lila_bg, 1 - alpha, 0, test_img_transparent)
+
+	#Note: use two variables in for loop
+		for item_obj,item_bg in zip(datas_obj,datas_bg):
+		if item_obj[0] >= 20 and item_obj[0] <= 106 and \
+			 item_obj[1] >= 30 and item_obj[1] <= 116 and \
+			 item_obj[2] >= 125 and item_obj[2] <= 245:
+			newData.append((item_bg[0], item_bg[1], item_bg[2]))
+		else:
+			newData.append(item_obj)
+
+
+tensor_im = cv2.imread('../Data/data_1/hinten/hinten_ww1_rz235_1_ex1_35.jpg')
+tensor_im = cv2.cvtColor(tensor_im, cv2.COLOR_BGR2GRAY)
+tensor_im = imutils.resize(tensor_im, width=184, height=184)  # w=146, h=121
+tensor_im = np.asarray(tensor_im, np.float32)
+im='/hint/hinten233.jpg'
+import os
+print os.path.basename(im)
+print os.path.splitext(im)[0]
+
+images = np.zeros((40,40,320,320))
+img = cv2.imread('../Data/data_3_u_net/resized/cadbg_001.jpg',0)
+#img = cv2.resize(img,(320,320))
+#img=np.asarray(img, np.float32)
+#img = np.ones((3,3))
+#cv2.imshow("window",img)
+#img = np.asarray(img, np.float32)
+#cv2.imshow("TensorFlow Window", imutils.resize(img.astype(np.uint8), 227))
+#cv2.waitKey(3000)
+images[0,0, :, :] = img
+#print images[0,0, :, :]
+#img = np.ones((2,2,3,3))
+#img[1,:,:,:] = 0
+
+#print images[0,0,:,:]
+#cv2.imshow("window2",images[0, 0, :, :])
+#cv2.waitKey(30000)
+
+img = cv2.imread('../Data/data_3_u_net/resized/cadbg_010.jpg',0)
+cv2.imshow("img_win",img)
+cv2.waitKey(5000)
+for i in range(1,3):
+    print i,
+print '\n'
+
+for j in range(0,3):
+    print j,
+
+print '\n'
+for k in xrange(1,1):
+    print k,
+import os
+test = '../Data/data_3_u_net/resized/cadbg_001.jpg'
+
+print os.path.basename(test)
+
+img = cv2.imread('../Data/data_3_u_net/resized/cadbg_010.jpg',0)
+img = np.expand_dims(np.array(img), 0).astype(np.float32)
+img = np.expand_dims(np.array(img), 0).astype(np.float32)
+print 'shape', img.shape
+a = []
+m = cv2.imread('../Data/data_3_u_net/resized/cadbg_010.jpg',0)
+m = np.expand_dims(np.array(m), 0).astype(np.float32)
+a.append(m)
+a.append(m)
+print 'a shape', len(a)
+a = np.expand_dims(np.array(a), 0).astype(np.float32)
+a.reshape(1,1,320,320, 3,1,320,320, order='C')
+print 'a shape', a.shape
+
+frame_tensor = cv2.imread('../testbench/res_000_first.jpg')  # uint8, res, float32 cannot be read
+#TODO evaluate frame_tensor to get detected ROI
+#frame_tensor = frame_tensor[0:184, 0:184]
+im = frame_tensor
+im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+im = imutils.resize(im, width = 184, height = 184) # w=146, h=121
+cv2.imshow("test",im)
+cv2.waitKey(1000)
+im = np.asarray(im, np.float32)
+test_labels = np.zeros((1, 6))
+
+test_image = im.reshape((-1, im.size))
+test_image = np.expand_dims(np.array(test_image), 2).astype(np.float32)
+test_image = test_image / 255 - 0.5  #
+import os
+a=os.listdir(absolute_path)
+long=absolute_path+'eva-model_GD360_h184_w184_c6all_4_tr_0.75-121.txt'
+classifier = absolute_path + 'model_GD360_h184_w184_c6all_4_tr_0.75-121.meta'
+n_bare=os.path.basename(classifier)[:-5]
+print 'n_bare',n_bare
+for filename in os.listdir('.'):
+    print filename
+    if filename.startswith('eva'):
+    #[filename for filename in os.listdir('.') if filename.startswith('eva')]
+    #if filename.startwith('eva-' + n_short + '.txt'):
+     print 'found'
+acc=0
+map=1
+#n_short = os.path.basename(classifier_model)[:-5]
+for filename in os.listdir(absolute_path):#where all eva- txt previously saved
+    if 'eva-' + n_bare in filename:
+      print 'found file',filename
+      os.rename(absolute_path+'eva-' + n_bare + '.txt', absolute_path+'eva-' + n_bare + '-' + str(acc) + '-' + str(map) + '.txt')
+im = cv2.imread('../Data/data_2/rechts/rechts_full.jpg')
+print im.shape[0],im.shape[1]
+im = im.reshape((-1,im.size))
+print im.shape[0],im.shape[1]
+#from matplotlib import pyplot as plt
+
+def binarize_array(numpy_array, threshold=200):
+    """Binarize a numpy array."""
+    for i in range(len(numpy_array)):
+        for j in range(len(numpy_array[0])):
+            if numpy_array[i][j] > threshold:
+                numpy_array[i][j] = 255
+            else:
+                numpy_array[i][j] = 0
+    return numpy_array
+
+#res1_b = cv2.cvtColor(res1_b,cv2.COLOR_GRAY2RGB)
+#res1_b = cv2.threshold(res1_b, 254, 255, cv2.THRESH_BINARY_INV)
+#res1_b = res1_b.convert('1')  # convert image to black and white
+#res1_b.save('binary.jpg')
+#res1_b = cv2.imread('binary.jpg')
+image = res1_b.convert('L')  # convert image to monochrome
+image = np.array(image)
+image = binarize_array(image, 155)
+#imsave(target_path, image)
+#cv2.imwrite('../testbench/binary.jpg',np.uint8(image))
+cv2.imshow('binary',np.uint8(np.uint8(image)))
+cv2.waitKey()
+res1 = cv2.imread('../testbench/frame_res_tmp0.jpg',0)
+res2 = cv2.imread('../testbench/frame_res_tmp02.jpg',0)
+cv2.imshow('ori_1',res1)
+cv2.imshow('ori_2',res2)
+
+rows, cols = res1.shape
+print 'rows,cols',rows,cols
+roi1 = res1[0:rows, 0:cols]
+roi2 = res2[0:rows, 0:cols]
+ret, res1 = cv2.threshold(res1, 50, 255, cv2.THRESH_BINARY)
+ret, res2 = cv2.threshold(res2, 50, 255, cv2.THRESH_BINARY)
+res_xor = cv2.bitwise_xor(res1,res2)
+cv2.imshow('1bin_res',res_xor)
+
+res1_inv = cv2.bitwise_not(res1) # reverse res1
+res2_inv = cv2.bitwise_not(res2) # reverse res2
+cv2.imshow('2bitwise_not_mask_inv_res1',res1_inv)
+cv2.imshow('3bitwise_not_mask_inv_res2',res2_inv)
+
+res = cv2.bitwise_and(res_xor,res1,mask=res1)
+cv2.imshow('4_xor_+_res1_inv',res)
+res = cv2.bitwise_and(res,res2,mask=res2)
+cv2.imshow('5res_+_res2_inv',res) #black
+
+#res1_bg = cv2.bitwise_and(res1_inv, res2)
+#cv2.imshow('2bitwise_and_res1_res1_using_INV',res1_bg)
+res2_fg = cv2.bitwise_xor(res1, res2)
+cv2.imshow('6bitwise_and_res2_res2',res2_fg)
+cv2.waitKey()
+
+#change Image from array to image
+im_tmp = Image.fromarray(im_tmp)
+#convert gray to color
+im_mat_color = cv2.cvtColor(im_mat,cv2.COLOR_GRAY2BGR)
+
+import os
+absolute_path = '/home/haiyan/Documents/ma/'
+path1='./z_path_file.txt'
+if os.path.isfile(path1):
+    print 'ok'
+else:
+    print 'make file'
+    open(absolute_path + path1,'w')
+a=[1, 2, 3]
+b=[11,22,33]
+c=[111,222,333]
+a1=np.zeros((3,3),dtype=float)
+colors=np.array([[1, 2, 3],[11,22,33],[111,222,333]])
+
+pred=[3,1,6]
+label=[2,4,9]
+print 'pred',pred
+r,g,b=[0,0,0],[0,0,0],[0,0,0]
+
+rt,gt,bt=[0,0,0],[0,0,0],[0,0,0]
+print '###########'
+for l in xrange(0,3):
+    print 'l=',l
+    print 'r[pred[l]==l] ----- ',r[pred[l]==l], ' ---- colors[',l,',0]=',colors[l,0]
+    r[pred[l]==l] = colors[l,0]
+    g[pred[l]==l]=colors[l,1]
+    b[pred[l]==l]=colors[l,2]
+    print 'r,g,b',r,g,b
+    rt[label[l]==l] = colors[l,0]
+    gt[label[l]==l] = colors[l,1]
+    bt[label[l]==l] = colors[l,2]
+    print '\n## transpose 01\n',rt,gt,bt
+
+np.random.seed(284) # random seed for consistency
+mu_vec1 = np.array([0,0,0])
+cov_mat1 = np.array([[1,0,0],[0,1,0],[0,0,1]])
+class1_sample = np.random.multivariate_normal(mu_vec1, cov_mat1, 20).T
+assert class1_sample.shape == (3,20), "The matrix has not the dimensions 3x20"
+
+mu_vec2 = np.array([1,1,1])
+cov_mat2 = np.array([[1,0,0],[0,1,0],[0,0,1]])
+class2_sample = np.random.multivariate_normal(mu_vec2, cov_mat2, 20).T
+assert class2_sample.shape == (3,20)
+
+from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import proj3d
+
+fig = plt.figure(figsize=(8,8))
+ax = fig.add_subplot(111, projection='3d')
+plt.rcParams['legend.fontsize'] = 10
+ax.plot(class1_sample[0,:], class1_sample[1,:], class1_sample[2,:], 'o', markersize=8, color='blue', alpha=0.5, label='class1')
+ax.plot(class2_sample[0,:], class2_sample[1,:], class2_sample[2,:], '^', markersize=8, alpha=0.5, color='red', label='class2')
+
+plt.title('Samples for class 1 and class 2')
+ax.legend(loc='upper right')
+
+plt.show()
+#https://www.safaribooksonline.com/library/view/programming-computer-vision/9781449341916/ch01.html
+dirs=os.listdir('../tmp/distor_in/simi/')
+#dirs=[s for s in dirs if 'full' in s]
+print dirs
+im1=Image.open('../tmp/distor_in/simi/'+dirs[0])
+im2=Image.open('../tmp/distor_in/simi/'+dirs[1])
+base=Image.new('RGBA',(2080,1900))
+base.paste((80, 80, 192), (0, 0, 2080, 1900))
+base.paste(im2,(300,500),mask=im2)
+base.paste(im1,(0,0))
+base.show()
+blended=Image.blend(im1,base,0)
+blended.show();
+del blended,base
+import os
+class_1_dirs = os.listdir("../Data/data_3_unet/mul_class/tree/")
+class_1_dirs = sorted([s for s in class_1_dirs if 'cad_m' in s])
+print class_1_dirs
+print 'show image'
+img = cv2.imread('../Data/data_3_unet/mul_class/holder/cad_im_013.jpg')
+cv2.imshow('tmp_img', img)
+cv2.waitKey()
+import os
+pca_source_path = '../Data/data_2/links/'
+dirs = [s for s in os.listdir(pca_source_path) if 'r_245_u16' in s]
+#im_jpg=[filename for filename in os.listdir(pca_source_path) if filename.endswith('.jpg')]
+print '\nim_jpg',dirs
+
+a=[[1,0,0],[0,1,0],[0,0,1]]
+b=[[2,3,4],[1,2,3],[1,2,3]]
+a=np.asarray(a)
+b=np.asarray(b)
+prod=a*(b.T)
+q = [0.2, 0.4, 0.8]
+res = prod*q
+#for i in xrange(3):
+#    for j in xrange(3):
+
+print prod
+print res
+import math
+a=0.033000
+for i in xrange(3000):
+    if a > 100:
+        a=a/10
+    elif a < 10:
+        a=a*10
+    else:
+        break
+
+#print math.log10(a/10)
+print a
+import os
+bg_LABELS = ['holder/', 'monitor/', 'tree/']
+LABEL_short = ['H', 'L', 'O', 'R', 'U', 'V']
+print 'train 6classes'
+train_path = '../Data/data_3_unet/mul_class/'
+paths = []
+for i in xrange(len(bg_LABELS)):
+    p = [s for s in os.listdir(train_path) if s in bg_LABELS[i]]
+    paths.append(train_path+p[0])
+train_paths = sorted(paths)
+print 'train_path:',train_paths
+a=Image.new('RGB',(10,10),(255,0,0))
+b=Image.new('RGB',(40,40),(0,0,0))
+#a.show(), b.show()
+
+a = a.convert('L')
+#b = b.convert('L')
+#a.show(), \
+#b.show()
+#a=[-2,3]
+#b=np.float32(a>0)
+print a
+a=cv2.imread('../Data/data_3_unet/mul_class/holder/cad_im_013.jpg')
+a=cv2.resize(a,(320,320))
+a= np.float32(a.reshape(320, 320, 3))
+
+a=np.uint8(a).reshape(320,320,3)
+cv2.imshow('a',a)
+cv2.waitKey()
+
+import os
+res_fail_list = ['../Test_Images/full_frames/frame_crop2180.jpg', '../Test_Images/full_frames/frame_crop1000.jpg', '../Test_Images/full_frames/frame_crop1500.jpg', '../Test_Images/full_frames/frame_crop660.jpg', '../Test_Images/full_frames/frame_crop2280.jpg', '../Test_Images/full_frames/frame_crop2000.jpg', '../Test_Images/full_frames/frame_crop560.jpg', '../Test_Images/full_frames/frame_crop2140.jpg', '../Test_Images/full_frames/frame_crop2560.jpg', '../Test_Images/full_frames/frame_crop1460.jpg', '../Test_Images/full_frames/frame_crop260.jpg', '../Test_Images/full_frames/frame_crop2480.jpg', '../Test_Images/full_frames/frame_crop620.jpg', '../Test_Images/full_frames/frame_crop80.jpg', '../Test_Images/full_frames/frame_crop2420.jpg', '../Test_Images/full_frames/frame_crop1880.jpg', '../Test_Images/full_frames/frame_crop320.jpg', '../Test_Images/full_frames/frame_crop1520.jpg', '../Test_Images/full_frames/frame_crop1200.jpg', '../Test_Images/full_frames/frame_crop120.jpg', '../Test_Images/full_frames/frame_crop1860.jpg', '../Test_Images/full_frames/frame_crop980.jpg', '../Test_Images/full_frames/frame_crop140.jpg', '../Test_Images/full_frames/frame_crop1820.jpg', '../Test_Images/full_frames/frame_crop2200.jpg', '../Test_Images/full_frames/frame_crop1040.jpg', '../Test_Images/full_frames/frame_crop920.jpg', '../Test_Images/full_frames/frame_crop1320.jpg', '../Test_Images/full_frames/frame_crop1480.jpg', '../Test_Images/full_frames/frame_crop1060.jpg', '../Test_Images/full_frames/frame_crop2460.jpg', '../Test_Images/full_frames/frame_crop180.jpg', '../Test_Images/full_frames/frame_crop220.jpg', '../Test_Images/full_frames/frame_crop200.jpg', '../Test_Images/full_frames/frame_crop1540.jpg', '../Test_Images/full_frames/frame_crop540.jpg', '../Test_Images/full_frames/frame_crop360.jpg', '../Test_Images/full_frames/frame_crop880.jpg', '../Test_Images/full_frames/frame_crop280.jpg', '../Test_Images/full_frames/frame_crop640.jpg', '../Test_Images/full_frames/frame_crop2080.jpg', '../Test_Images/full_frames/frame_crop1020.jpg', '../Test_Images/full_frames/frame_crop1280.jpg', '../Test_Images/full_frames/frame_crop2540.jpg', '../Test_Images/full_frames/frame_crop160.jpg', '../Test_Images/full_frames/frame_crop1140.jpg', '../Test_Images/full_frames/frame_crop1220.jpg', '../Test_Images/full_frames/frame_crop1560.jpg', '../Test_Images/full_frames/frame_crop600.jpg']
+res_pass_list = ['../Test_Images/full_frames/frame_crop1760.jpg', '../Test_Images/full_frames/frame_crop1740.jpg']
+
+print 'num of images:',len(res_fail_list)
+lines=[]
+for name in res_fail_list:
+    im = cv2.imread(name)
+    #cv2.resize(im,(480,360))
+    #cv2.imshow(os.path.basename(name)[:-4],im)
+    #cv2.waitKey(1)
+    #cv2.destroyAllWindows()
+lines = '\n'.join(res_fail_list)
+#with open('../seg_eva_fail.txt','w') as f:
+#    f.writelines(lines)
+
+with open('../Test_Images/seg_eva_fail.txt', 'r') as f:
+    lines = f.read().splitlines()
+    read_path = os.path.dirname(lines[0])
+    files = []
+    for line in lines:
+        files.append(os.path.basename(line))
+print lines[0], '\nread_path:',read_path, ',   base name:', files[0]
+a=cv2.imread('../Test_Images/full_frames/' + files[0])
+cv2.imshow('test',a)
+
+
+im=Image.open('../tmp/resized/rest2/cad_m_001.jpg').convert('RGBA').resize((320,320))
+print 'im size',im.size
+import os
+im=Image.open('../tmp/resized/rest2/cad_im_118.jpg')
+ims=[s for s in os.listdir('../tmp/resized/rest2/') if '118.jpg' in s]
+for img in ims:
+    print 'img',img
+    im = Image.open('../tmp/resized/rest2/'+img)
+    #img.show()
+    im.thumbnail((320,320),Image.ANTIALIAS)
+    im.save('../tmp/resized/rest2/'+img)
+    print im.size
+#weights.append(tf.Variable(tf.random_normal([n_input, Population[sample][0], 0., 1.))
+num_classes=2
+#cost = loss(logits, labels, num_classes, head = None)
+
+
+x_data = np.random.rand(2, 100) # Random input
+y_data = np.dot([0.100, 0.200], x_data) + 0.300
+y = np.dot([0.100, 0.200], x_data) + 0.400
+
+# Construct a linear model.
+b = tf.Variable(tf.zeros([1], dtype=np.float32))
+W = tf.Variable(tf.random_uniform([1, 2], minval=-1.0, maxval=1.0, dtype=np.float32))
+#y = tf.matmul(W, x_data) + b
+
+import tensorflow as tf
+
+a = [0.0,
+     0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0,
+     1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0,
+     1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0,
+     1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0,
+     1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+     1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0,
+     1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+
+# logits, labels = [], []
+logits_size = len(a)
+label_size = len(a)
+n_input = [1, 2, 3]
+b = np.ones(64)
+
+logits = tf.Variable(tf.random_normal([logits_size], stddev=0.35), name="lo")
+labels = tf.Variable(tf.random_normal([label_size], stddev=0.35), name="la")
+
+with tf.Session() as sess:
+    assign_op = logits.assign(a)
+    assign_op2 = labels.assign([sum(x) for x in zip(a, b)])
+    sess.run(assign_op)
+    sess.run(assign_op2)
+    print 'logits:', logits
+    cost = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits, labels), name="cost")
+    cost = sess.run(cost)
+    print 'cost:', cost
+
+#first define a reshape, then use tf.squeeze to remove extra part
+
+import tensorflow as tf
+v1 = tf.Variable([
+    [1, 2, 3, 4],
+    [5, 6, 7, 8],
+    [9, 10, 11, 12]
+])
+#v2a = tf.Variable([[1,2,4],[3,4,2],[4,3,3],[9,5,3]])
+v2a = tf.Variable(np.zeros([3,4]))
+v2a_sq = tf.squeeze(tf.reshape(v2a,[-1,3,2])) #the multiplication of all elements should be equal to total elements in
+v2a2_sq = tf.squeeze(tf.reshape(v2a,[12,-1,1])) #the multiplication of all elements should be equal to total elements in
+#given variable, axis 0 cannot be removed
+
+v2 = tf.reshape(v1, [2, 6])
+v3 = tf.reshape(v1, [2, 2, -1])
+v4 = tf.reshape(v1, [-1])
+# v5 = tf.reshape(v1, [2, 4, -1]) will fail, because you can not find such an integer for -1
+v6 = tf.reshape(v1, [1, 4, 1, 3, 1])
+v6_shape = tf.shape(v6)
+v6_squeezed = tf.squeeze(v6)
+v6_squeezed_shape = tf.shape(v6_squeezed)
+
+init = tf.initialize_all_variables()
+
+sess = tf.Session()
+sess.run(init)
+a, b, c, d, e, f, g,h,h2 = sess.run([v2, v3, v4, v6, v6_shape, v6_squeezed, v6_squeezed_shape,v2a_sq,v2a2_sq])
+# print all variables to see what is there
+print e # shape of v6
+print g # shape of v6_squeezed
+print 'squeezed v2a\n',h,',\nv2a2\n',h2
+'''
+
+import tensorflow as tf
+import numpy as np
+
+
+
+'''
+dira = '../'
+idx = '1' or 'tmp'
+im = Image.open('{}/Data/{}.jpg'.format(dira, idx))
+im.show()
+
+
+ph = tf.placeholder(shape=[None, 3], dtype=tf.int32)
+# look the -1 in the first position
+x = tf.slice(ph, [0, 1], [-1, 2])
+input_ = np.array([[1, 2, 3],
+                   [3, 4, 5],
+                   [5, 6, 7]])
+
+x1 = tf.placeholder(shape=[None, 4, 4], dtype=tf.int32)
+print 'x1 shape def:', x1.get_shape()
+# x1=tf.Variable(np.array([None,2],dtype=tf.int32)) #(np.zeros([3,4]))
+# (shape=[None,2], dtype=tf.int32)
+x_train1 = np.array([[[1, 2, 3, 4],
+                      [3, 4, 2, 6],
+                      [3, 4, 2, 6], [3, 4, 2, 6]
+                      ]])
+x_train = np.array([[[1, 2, 3, 4],
+                     [3, 4, 2, 6],
+                     [3, 4, 2, 6], [3, 4, 2, 6]
+                     ]])
+# shape (1,4,5)
+b = tf.Variable([[[1, 2, 4],
+                  [5, 2, 6],
+                  [2, 2, 6]]])
+
+y = tf.slice(b, [0, 0, 0], [1, 3, 2])  # slice(input, start position, step size)
+# step size: at position [0] can only be set 0-not changing or 1-start from that position
+# at step size position [1][2]: set 1 will not be changing; set >0 and < the range of the field: be counted,
+x3 = tf.placeholder(shape=[None,3,2], dtype=tf.float32)
+x2 =np.array([[[2,3],[1,2],[5,6]],
+                 [[2,3],[1,2],[5,6]],
+                 [[2,3],[1,2],[5,6]]])
+y2 = tf.slice(b,[0,0,0], [1,3,2])
+with tf.Session() as sess:
+	sess.run(tf.initialize_all_variables())
+	# print( sess.run(x, feed_dict={ph: input_}))
+	# print '\ny=',sess.run(y)
+	# print '\nb=',sess.run(b[0,1,0]) #
+	#print 'x1:\n', sess.run(x1, feed_dict={x1: x_train})
+	#print 'x1 shape:', x1.get_shape(), ', x1:', x_train.shape
+	#x1_slice = tf.slice(x1, [0, 0, 0], [1, 2, 2])
+	#print 'x1_slice shape:',x1_slice.get_shape()
+	
+	y2 = sess.run(y2)
+	print 'y2 content shape:', b.get_shape(),',slice y2:\n', y2
+	#x2 =np.array([[[2,3],[1,2],[5,6]], [[2,3],[1,2],[5,6]], [[2,3],[1,2],[5,6]]])
+	#print 'x2 shape2:', x2.shape
+	#print 'x2=',x2[0]
+	#x3 = sess.run(x3, feed_dict={x3:x2})
+	#print '\nx3=',x3
+import cv2
+a=[199]*(320*320)
+a=np.asarray(a)
+a=a.reshape(320,320)
+a=np.uint8(a)
+print a
+cv2.imshow('a',a)
+cv2.waitKey()
+import tensorflow as tf
+a,b=9,2
+c=tf.equal(a,b)
+with tf.Session() as sess:
+	#sess.run(tf.initialize_all_variables())
+	c_ = sess.run(tf.initialize_all_variables())
+	print 'c=',sess.run(c)
+	
+	acc = tf.reduce_mean(tf.cast(c_, tf.float32), name="accuracy")
+	
+	print sess.run(acc)
+import cv2
+import os
+path= '../Data/data_3_segnet/mul_class/table/labels/'
+dirs = [s for s in os.listdir(path)]
+for name in dirs:
+	file = path + name
+	im = cv2.imread(file)
+	im = cv2.resize(im,(320,320))
+	cv2.imwrite(file,im)
+print len(os.listdir(path)), 'files'
+a = [[1,2,3]]
+b = [[2,3,4]]
+cross = tf.nn.softmax_cross_entropy_with_logits(a,b)
+
+with tf.Session() as sess:
+	print 'cross:', sess.run(cross, feed_dict={a:a, b:b})
+import tensorflow as tf
+p=tf.placeholder(tf.float32)
+
+aa = np.asarray( [[1,2,3]])
+ba = np.asarray([[2,3,4]])
+a=np.linalg.norm(aa-ba)
+print a.shape
+with tf.Session() as sess:
+	sess.run(p,feed_dict={p:a})
+	print p
+acc = 0.5
+for i in xrange(30):
+	cv2.waitKey(100)
+	if acc > 0.7:
+		print 'acc break'
+		break
+	acc += 0.08
+	print 'acc + 0.08', acc
+	
+key_term = 'model_seg_GD_h184_w184_b3_II_0.49-41'
+save_path = '../logs/1/'
+seg_tf_model_files = save_path + key_term
+print 'seg_tf_model_files', seg_tf_model_files
+print 'new file', save_path + os.path.basename(seg_tf_model_files)
+
+new_file = save_path + os.path.basename(seg_tf_model_files)
+print 'new file key expected', save_path + seg_tf_model_files + '(copy)'
+
+files = [s for s in os.listdir(save_path) if key_term in s]
+for i in xrange(len(files)):
+	if key_term + '(copy)' in files[i]:
+		print 'alreay exisits'
+		break
+	else:
+		from shutil import copyfile
+		ext = os.path.splitext(files[i])[1]
+		print '\nfile',files[i], '   ext', ext
+	
+		copyfile(save_path + files[i], save_path + os.path.splitext(files[i])[0] + '(copy)' + ext)
+
+import urllib
+url='local:6006'
+im_file = 'http://localhost:6006/data/individualImage?index=3&tag=result_1%2Fimage%2F0&run=train&ts=1'
+#im_file = 'http://localhost:6006/data/individualImage?index=3&tag=result_1%2Fimage%2F0&run=train&ts=1490345851.220132'
+urllib.urlretrieve(im_file, "../local-4.png")
+print 'im saved'
+
+a= 3 > 5 and 4 > 6 and 5 < 1
+print a
+import Image
+import ImageMath
+
+def distance2(a, b):
+    return (a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2])
+
+def makeColorTransparent(image, color, thresh2=0):
+    image = image.convert("RGBA")
+    red, green, blue, alpha = image.split()
+    image.putalpha(ImageMath.eval("""convert(((((t - d(c, (r, g, b))) >> 31) + 1) ^ 1) * a, 'L')""",
+        t=thresh2, d=distance2, c=color, r=red, g=green, b=blue, a=alpha))
+    return image
+
+import time
+import psutil
+im = '../tmp/CAD/lila2/full/mul_in_1/mix_oben_links_lila_background2.jpg'
+im = Image.open(im)
+tr_im = makeColorTransparent(im, (80,80,192))
+#tr_im.show()
+im_bot= '../tmp/CAD/lila2/full/mul_in_1/mix_oben_links_lila_background.jpg'
+im_bot=Image.open(im_bot).convert('RGBA')
+im_bot = makeColorTransparent(im_bot, (80,80,192))
+lila = Image.new('RGBA',im_bot.size,(80,80,192))
+#im_bot=(Image.open(im_bot)).convert('RGBA')
+lila.paste(tr_im,(0,0),tr_im)
+lila.show()
+time.sleep(7)
+new_size = int(im_bot.size[0]*0.8)
+lila.paste(im_bot,(20,50),im_bot)
+lila.show()
+time.sleep(5)
+for proc in psutil.process_iter():
+	if proc.name() == "display":
+		proc.kill()
+
+
+if __name__ == '__main__':
+    import sys
+    makeColorTransparent(Image.open(sys.argv[1]), (255, 255, 255)).save(sys.argv[2]);
+color_cvt_flags = [i for i in dir(cv2) if i.startswith('COLOR_')]
+for item in color_cvt_flags:
+	print item
+    
+def add_colorOverlay(img_grayscale, mask):
+  colorOverlay = cv2.cvtColor(img_grayscale, cv2.COLOR_GRAY2RGB)
+  #colorOverlay = cv2.cvtColor(img_grayscale, (80))
+  colorOverlay[:, :, 2] = mask
+  return colorOverlay
+#path = '../mul_in_1/921_14im.jpg'
+path = '../921_14im.png'
+ori = '../Data/data_3_segnet/mul_class/table14/images/cad_im_015.jpg'
+ori = cv2.imread(ori)
+mask = '../Data/data_3_segnet/mul_class/table14/labels/cad_m_015.jpg'
+im = cv2.imread(path,0)
+mask = cv2.imread(mask,0)
+mask = np.asarray(mask)
+print mask.shape
+mask = cv2.resize(np.uint8(mask), (320, 320))
+overlay = add_colorOverlay(im,mask)
+im_rgb = cv2.cvtColor(im,cv2.COLOR_GRAY2RGB)
+comb = np.hstack((ori,im_rgb,overlay))
+#cv2.imshow('comb',comb)
+
+#cv2.waitKey()
+import random
+#logits=[0.951,    0.01,  0.701, 0.3942, 0.0001]
+logits,labels = [],[]
+pixelnum=320*320
+for l in xrange(pixelnum-1):
+	labels.append(randint(1,99))
+	#logits.append(randint(1,9))
+
+diff= np.full(pixelnum-1,0.3)
+logits = labels-diff
+
+
+labels.append(96.0)
+fac= np.full(pixelnum,100.0)
+labels = (labels/fac) #0.01 to 0.99
+print 'min,max label:', min(labels), ', ', max(labels)
+
+logits = list(logits)
+logits.append(1e-2)
+print 'min,max logits:', min(logits), ', ', max(logits)
+
+#print 'logits,labels', logits,'\n', labels
+
+#print 'e 1e-8', 1e+28 * 1e-28
+es=np.full((len(logits)),0.000000001)
+ones=np.ones(len(logits))
+#labels=[1,          0,     1,      1,        0]
+logits = np.asarray(logits)
+labels = np.asarray(labels)
+
+_labels=(labels+es)
+print '-labels:', _labels
+_labels=ones-(labels+es)
+print '\n1-labels:', np.abs(_labels),'\n#######'
+
+q=ones-logits
+
+loss=np.abs(logits*np.log(labels+es)+q*np.log(np.abs(_labels)))
+#loss=np.abs(logits*np.log(labels+es))
+loss_m = np.mean(loss)
+#print logits*np.log(labels),',',q*np.log(np.abs(_labels))
+print '\nloss_m:',loss_m
+
+#reduce_sum(tf.pow(pred-Y, 2))/(2*n_samples)
+times_diff = (logits-labels)
+min_diff=np.min(logits-labels)
+times_diff = times_diff *10
+print 'min-diff:', min_diff
+mean_s_error = np.sum(np.power(times_diff,2))/(len(logits))/10
+print 'mean s error:', mean_s_error
+a=[0,0,0]
+list = []
+for i in xrange(5):
+	list.append(a)
+list = np.asarray(list)
+print 'list', list, 'len list', len(list)
+#indexes=np.array((0,1,2)).tolist()
+indexes = np.random.randint(0,3,size=5).tolist()
+# np.random.randint(0, self.images.shape[0], size=[batch_size]).tolist()
+print indexes
+b=[34,55,66,42,43]
+c=b[indexes]
+print c
+
+path = '/home/haiyan/Documents/MA/Data/data_3_segnet/mul_class/public/ADEChallengeData2016/annotations/training/'
+file='ADE_train_00001712_old.png'
+file_n='ADE_train_00001712.png'
+im = cv2.imread(path+file,0)
+img = cv2.imwrite(path+file_n,im)
+print np.full(4,1)
+
+import urllib2
+def save_tb_page(save_path='',url='http://127.0.1.1:6006/'):
+	page = urllib2.urlopen(url)
+	page_content = page.read()
+	with open('page_content1.html', 'wb') as file_id:
+		file_id.write(page_content)
+		
+save_tb_page(save_path='/home/haiyan/Documents/FCN/tb_pages/',url='http://127.0.1.1:6006/')
+
+str = 'cad_im_im001.jpg'
+print str.replace('_im_', '_m_',3)#first num of count will be replaced, if there are multiple substrings
+
+
+def _transform(__channels, filename):
+	image = misc.imread(filename)
+	#image = cv2.imread(filename)
+	print 'image shape:',len(image.shape)
+	if __channels and len(image.shape) < 3:  # make sure images are of shape(h,w,3)
+		image = np.array([image for i in range(3)])
+	
+		resize_size = 224
+		image = misc.imresize(image,
+		                             [resize_size, resize_size], interp='nearest')
+		
+	if not __channels:
+		image = misc.imread(filename,mode='I')
+	
+	#image = np.fliplr(image)
+	return np.array(image)
+
+path ='/home/haiyan/Documents/MA/Data/data_3_segnet/mul_class/public/ADEChallengeData2016 (prep_short_color)/annotations/training/'
+fn = 'ADE_train_00012897.png'
+im = cv2.imread(path + fn)
+#import scipy.misc as misc
+#img = misc.imread(path + fn)
+
+__channels = False
+flip = True
+annotations = np.array([np.expand_dims(_transform(__channels,path + fn), axis=3)])
+print 'annotations shape:', annotations.shape
+path ='/home/haiyan/Documents/MA/'
+fn = 'cad_outside_m_037.jpg'
+im_ = misc.imread(path + fn)
+im = im_.copy()
+thresh = 160
+idx = im[:,:,0] > thresh
+im[idx,0] = thresh
+diff = np.diff(np.asarray(idx, dtype=int))
+print 'diff:', diff
+
+sum = (diff<0).sum()
+print 'sum after ceiling:', sum
+
+#check
+idx = im[:,:,0] > thresh
+diff = np.diff(np.asarray(idx, dtype=int))
+print 'diff check:', diff
+
+sum = (diff<0).sum()
+print 'sum check:', sum
+cv2.imwrite('../tmp_threshed.jpg',im)
+#path ='/home/haiyan/Documents/MA/Data/data_3_segnet/mul_class/public/ADEChallengeData2016 (prep_short_color)/annotations/training/'
+fn = 'ADE_train_00000025.png'
+path ='/home/haiyan/Documents/MA/Data/data_3_segnet/mul_class/MA/training/labels/'
+#im_ = misc.imread(path + fn)
+#im = im_.copy()
+dirs = [s for s in os.listdir(path)]
+imgs = []
+for i in dirs[0:2]:
+	# img = misc.imread(path + i , mode=None)
+	img = misc.imread(path + i, mode='I')
+	
+	# img = misc.imrotate(img,90,interp='bilinear')
+	img_ = img.copy()
+	img_ = np.swapaxes(img_,0,1) #
+	
+	imgs.append(img)
+	imgs.append(img_)
+	#imgs = np.concatenate((img,img_),axis=0)
+for im in imgs:
+	misc.imshow(im)
+
+for i in dirs[0:2]:
+	#img = misc.imread(path + i , mode=None)
+	img = misc.imread(path + i, mode='I')
+	#img = misc.imrotate(img,90,interp='bilinear')
+	img = np.flip(img,0) #ud
+	#misc.imshow(img)
+	
+
+for i in dirs[0:2]:
+	# img = misc.imread(path + i , mode=None)
+	img = misc.imread(path + i, mode='I')
+	# img = misc.imrotate(img,90,interp='bilinear')
+	img = np.flip(img, 1) #lr
+	#misc.imshow(img)
+
+	print 'img shape:', img.shape
+for i in range(-1,2):
+	print i
+batch_size = 3
+i_to = 0
+i_from = 0
+total_im = 20
+e = 0
+max_iter = 50
+f_e = float(max_iter*batch_size/total_im)
+i_e = int(max_iter*batch_size/total_im)
+total_e = i_e if i_e < f_e else i_e+1
+start = time.time()
+
+for i in xrange(max_iter):
+	end = time.time()
+	elapsed = end - start
+	i_from = i_to if i_to < total_im-1 else 0
+	i_to = min(total_im-1,i_from+batch_size)
+	
+	print 'iter %2d from %d to %d'%(i, i_from,i_to)
+		
+	for batch_step in xrange(batch_size):
+		i_from, i_to = int(i_from), (i_from + batch_size)
+	
+	#if i%total_im == 0:
+	if i_from == 0:
+		
+		print '---------> Epoch %d/%d %ds'%(e, total_e,int(elapsed*1000*1000))
+		e += 1
+a = cv2.imread('../haiyanrz.jpg')
+(w,h,c) = a.shape
+print 'w,h:',w,h
+#
+factor=2.42
+nw, nh = int(w/factor), int(h/factor)
+
+print 'w,h:', nw, ', ',nh
+a_rz = cv2.resize(a,(nh, nw))
+print a_rz.shape
+cv2.imwrite('../haiyanrz1.jpg',a_rz)
+import re
+import requests
+url = raw_input("Now enter a url:")
+r  = requests.get("http://" +url)
+data = r.text
+soup = BeautifulSoup(data)
+for images in soup.find_all('a'): print(images.get('href'))
+
+#this code can only work with other website
+#require import BeautifulSoup
+def save_all_imgs_from_webpage(url='',filename=''):
+    url = 'http://www.cbssports.com/nba/draft/mock-draft'
+    filehandle = urllib2.urlopen(url).read()
+    soup = BeautifulSoup(filehandle, 'html.parser')
+    images = soup.findAll("img", {"alt": True, "src": True})
+    if images is None:
+        print 'No matching image found'
+    else:
+        print 'matching image found, image link:', images
+        for img in images:
+            image_link = img["src"]
+            print 'image_link', image_link
+            filename = image_link.split('/')[-1]
+            print 'filename:', filename
+            urllib.urlretrieve(image_link, '../Tensorboard_data/tb_imgs/'+filename)
+
+#save_all_imgs_from_webpage()
+
+def save_all_imgs_from_localhost(url='', filename=''):#not working!
+    filehandle = urllib2.urlopen(url).read()
+    soup = BeautifulSoup(filehandle, 'html.parser')
+    
+    images = soup.findAll("img", {"src": True})
+    #images = soup.findAll("img", {"alt": True, "src": True})
+    
+    if images is None:
+        print 'No matching image found'
+    else:
+        print 'matching image found, image link:', images
+        for img in images:
+            image_link = img["src"]
+            print 'image_link', image_link
+            filename = image_link.split('/')[-1]
+            print 'filename:', filename
+            urllib.urlretrieve(image_link, '../Tensorboard_data/tb_imgs/' + filename)
+
+#save_all_imgs_from_localhost('http://127.0.1.1:6006/','1')
+
+def save_img_from_tb():
+    #url = 'http://127.0.1.1:6006/data/individualImage?index=3&tag=c_conv19%2Fimage%2F0&run=train&ts=1494595449.56947*'
+    url = 'http://127.0.1.1:6006/data/individualImage?index=3&tag=c_conv19%2Fimage%2F0&run=train&*'
+    #url = 'http://127.0.1.1:6006/data/individualImage?index=3&tag=c_conv19*'
+    urllib.urlretrieve(url,'../Tensorboard_data/sum107/05-12/5.png')
+save_img_from_tb()
+
+def save_im_from_tf(save_path):
+    import urllib
+    localhost = 'http://127.0.1.1:6006/'
+    # http://127.0.1.1:6006/data/individualImage?index=3&tag=c_conv19%2Fimage%2F0&run=train&ts=1494604797.044739
+    url_img = localhost + '/data/individualImage?index=3&tag=b_pred*'
+    save_name = save_path + '_pred.png'
+    urllib.urlretrieve(url_img, save_name)
+    
+    url_img = localhost + '/data/individualImage?index=3&tag=c_conv19*'
+    save_name = save_path + '_conv19.png'
+    urllib.urlretrieve(url_img, save_name)
+    
+    print 'tb im saved', save_path
+#save_im_from_tf('../Tensorboard_data/sum107/05-12/')
+def conv2d_k(img, w, b, k,pad='SAME',name=None):
+    return tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(img, w, strides=[1, k, k, 1], padding=pad), b),name=name)
+def conv_layer(img,i):
+    i = 27 #len(layers)=27
+    conv1_out, conv2_out, conv3_out, conv4_out                                 = 8, 8, 16, 16
+    conv5_out, conv6_out, conv7_out, conv8_out, conv9_out, conv10_out          = 32, 32, 32, 32, 32, 32
+    up1, concat1, conv11_out, conv12_out, up2, concat2, conv13_out, conv14_out = 32, 64, 32, 32, 32, 32, 32, 32  # concat2:64 or 32
+    up3, concat3, conv15_out, conv16_out, up4, concat4, conv17_out, conv18_out,conv19_out = 32, 32, 16, 8, 16, 8, 8, 8,3  # conv16_out:16 or 8
+
+    #
+    weights = (
+        'wc1', 'wc2', 'wc3', 'wc4', 'wc5', 'wc6', 'wc7', 'wc8', 'wc9', 'wc10', 'up1', 'concat1', 'wc11', 'wc12',
+        'up2',
+        'concat2', 'wc13', 'wc14', 'up3', 'concat3',
+        'wc15', 'wc16', 'up4', 'concat4', 'wc17', 'wc18', 'wc19')
+    biases = (
+        'bc1', 'bc2', 'bc3', 'bc4', 'bc5', 'bc6', 'bc7', 'bc8', 'bc9', 'bc10', 'bc_up1', 'bc_concat1', 'bc11',
+        'bc12',
+        'bc_up2', 'bc_concat2',
+        'bc13', 'bc14', 'bc_up3', 'bc_concat3', 'bc15', 'bc16', 'bc_up4', 'bc_concat4', 'bc17', 'bc18', 'bc19')
+    
+    layers = (
+    conv1_out, conv2_out, conv3_out, conv4_out, conv5_out, conv6_out, conv7_out, conv8_out, conv9_out, conv10_out,
+    up1, concat1, conv11_out, conv12_out, up2, concat2, conv13_out, conv14_out,
+    up3, concat3, conv15_out, conv16_out, up4, concat4, conv17_out, conv18_out,conv19_out)
+    SEED = 8
+    stddev = np.sqrt(2.0 / layers[i - 1]).astype(np.float32)
+    fsize, f_out = 3, 1
+    k_conv, k_max_pool = 1, 2
+    #'wc2': tf.Variable(tf.truncated_normal([filter_size, filter_size, conv1_out, conv2_out],
+    #for n,weight_n, bias_n in zip(xrange(len(layers)),weights, biases):
+    input_ch = 3
+    if i == 0:
+        print 'i', i, ',  layer i-1:', input_ch, ',  layer i:', layers[i]
+        f, in_ch, out_ch = fsize, input_ch, layers[i]
+        stddev = np.sqrt(2.0 / SEED).astype(np.float32)
+    elif i == len(layers)-1:
+        f, in_ch, out_ch = f_out, layers[i-1], conv19_out
+    
+    else:
+        print 'i',i,',  layer i-1:', layers[i-1], ',  layer i:', layers[i]
+        f, in_ch, out_ch = fsize, layers[i-1], layers[i]
+    
+    weight = tf.Variable(
+        tf.truncated_normal([f, f, in_ch, out_ch], stddev=stddev, seed=SEED),name=weights[i])
+    bias = tf.Variable(tf.truncated_normal([layers[i]]), name=biases[i])
+    print 'weights[i]', weights[i], ', biases[i]', biases[i]
+    current_layer = conv2d_k(img, weight, bias, k_conv)
+    return current_layer
+
+
+
+// jaccard similarity coefficient
+// overlap/covered area, in range [0,1]
+const double jaccardScore(const cv::Rect roi1, const cv::Rect roi2)
+{
+  return 1. * (roi1 & roi2).area() / (roi1 | roi2).area();
+}
+#To validate dice
+import tools_classifier_seg as tools
+h, w = 320, 320
+
+images, masks = tools.load_and_preprocess_test_data(h,w)
+images, masks = masks, masks
+for i,im, m in zip(xrange(len(images)-1),images,masks):
+	#im = cv2.reshape(im,(h,w,3))
+	#m = cv2.reshape(m,(h,w))
+	cv2.imshow('im_'+str(i),im)
+	cv2.imshow('m_'+str(i),m)
+	cv2.waitKey()
+	cv2.destroyAllWindows()
+	
+	dice = tools.calc_dice_simi(im, m, k=1)
+	print i, dice
+import glob
+
+dir1 = '../Data/data_3_segnet/mul_class/MA_real/training/'
+dir_glob = os.path.join(dir1,'images','*.jpg')
+dir_list = os.listdir(dir1+'images')
+print dir_glob
+for index,dir_l in zip(xrange(len(dir_list)),dir_list):
+	print 'index',index
+	
+	for im in ims[0:3]:
+	im = os.path.join(a,im)
+	im = misc.imread(im,'I')
+	print 'im shape',im.shape
+	im = misc.imresize(im, [h, w], interp='nearest')
+	im = im / 255.0
+	im_arr = np.expand_dims(np.array(im>0), 2).astype(np.float32)
+	misc.imshow(im_arr.reshape((h,w)))
+	print 'im shape',im_arr.shape
+	test.png
+[1000, 0, 1, 23, 13, 16, 20, 4]
+total: 8
+a = '../Data/data_3_segnet/mul_class/MA_yellowbg/training/'
+#a = '../Data/data_3_segnet/mul_class/MA_cam/masks/'
+
+h,w = 320,320
+#ims =sorted([s for s in os.listdir(a)])
+ims =sorted([s for s in os.listdir(a) if 'test1' in s])
+ds = [0]
+for im in ims[0:2]:
+	print im
+	im = os.path.join(a,im)
+	im = Image.open(im).convert('RGBA')
+	#im.show()
+	datas = im.getdata()
+	for data in datas:
+		for i in xrange(3):
+			if data[i] not in ds:
+				ds.append(data[i])
+	print ds,'\ntotal:',len(ds)
+
+a = '../tmp/resized/rest2/'
+#a = '../Data/data_3_segnet/mul_class/MA_cam/masks/'
+
+h,w = 320,320
+#ims =sorted([s for s in os.listdir(a)])
+ims =sorted([s for s in os.listdir(a) if '001' in s])
+ds = [0]
+new_color = (255,255,255)
+new_color_bg = (0,0,0)
+bg = [s for s in os.listdir(a) if '001' in s]
+bg = Image.open(a+bg[0])
+#bg.show()
+print 'bg size', bg.size
+for im in ims[0:2]:
+	print im
+	picture = Image.open(a+im)
+	#picture.show()
+	(w1,h1) = picture.size
+	print picture.size
+	picture = picture.crop(box=(0,0,w,h))
+	picture.thumbnail((w,h),Image.ANTIALIAS)
+	print 'p size',picture.size
+	for x in xrange(w):
+		for y in xrange(h):
+			current_color = picture.getpixel((x,y))
+			current_color_bg = bg.getpixel((x,y))
+			if current_color == (80,80,192):
+				#print current_color,
+				picture.putpixel((x,y), current_color_bg)
+			else:
+				picture.putpixel((x,y), new_color)
+	picture.show()
+	datas = picture.getdata()
+	for data in datas:
+		for i in xrange(3):
+			if data[i] not in ds:
+				ds.append(data[i])
+	print ds, '\ntotal:', len(ds)
+
+
+
+def calc_dice_simi(seg, gt, img_name, k=1):
+	# segmentation
+	# seg = np.zeros((100,100), dtype='int')
+	# seg[30:70, 30:70] = k
+	
+	# ground truth
+	# gt = np.zeros((100,100), dtype='int')
+	# gt[30:70, 40:80] = k
+	
+	dice = np.sum(seg[gt == k]) * 2.0 / (np.sum(seg) + np.sum(gt))
+	
+	print img_name, ', dice similarity score: {}'.format(dice)
+	return dice
+
+
+def create_mul_class_mask():
+	#a = '../Data/data_3_segnet/mul_class/MA_cam/masks/'
+	a = '/home/haiyan/Documents/haiyan_paperwork/2572images_ana/'
+	bg_mul_label_path = '/home/haiyan/Documents/haiyan_paperwork/2572masks_ana/'
+	LILA_PATH = '../tmp/CAD/lila2/full/mul_in_2_right_position/'
+	
+	h,w = 320,320
+	#ims =sorted([s for s in os.listdir(a)])
+	ds = [0] #initial with pixel value 0
+	new_color_fg = (255,255,255)
+	new_color_bg = (0,0,0)
+	
+	CAD_lilas = [s for s in os.listdir(LILA_PATH)][0:2]
+	ms = sorted([s for s in os.listdir(bg_mul_label_path)])[300:303]
+	ims = sorted([s for s in os.listdir(a)])[300:303]
+	
+	#bg.show()
+	for lila,i in zip(CAD_lilas,xrange(len(CAD_lilas))):
+		index = 1
+		print '\n#####',lila
+		m = Image.open(bg_mul_label_path+ms[index])
+		im = Image.open(a+ims[index])
+		lila = Image.open(LILA_PATH+lila)
+		(wlila, hlila) = lila.size
+		(w1, h1) = m.size
+		print 'm size:', w1,h1
+		#picture.show()
+		print 'lila ori size',lila.size
+		std = min(w,h)
+		if w1>h and h1 > w: #resize to similar size with public data
+			lila = lila.crop(box=(int(0.5*(wlila-hlila)),0, int(0.5*(wlila+hlila)), hlila))
+			lila.thumbnail((std,std),Image.ANTIALIAS)
+			data_lila = lila.copy()
+			CAD_datas = data_lila.convert('RGBA').getdata()
+			#lila.show()
+			print 'resized lila size,m size,im size',lila.size,m.size,im.size
+			index = 0
+			for y in xrange(std):
+				for x in xrange(std):
+					current_color = lila.getpixel((x,y))
+					new_bg_content = m.getpixel((x,y))
+					data_obj = CAD_datas[index]
+					index += 1
+					#if current_color == (80,80,192):
+					if data_obj[0] >= 20 and data_obj[0] <= 106 and \
+														data_obj[1] >= 30 and data_obj[1] <= 116 and \
+														data_obj[2] >= 125 and data_obj[2] <= 245:
+							
+						lila.putpixel((x,y), new_bg_content)
+					else:
+						lila.putpixel((x,y), new_color_fg)
+			#lila.show()
+			
+			misc.imsave('../tmp/resized/rest2/cad_0tmp_' + str(i) + '.png',lila)
+		else:
+			print 'image size too small'
+			
+		datas = lila.getdata()
+		for data in datas:
+			for i in xrange(3):
+				if data[i] not in ds:
+					ds.append(data[i])
+		print ds, '\ntotal:', len(ds)
+#create_mul_class_mask()
+
+def check_pixel_class_num():
+	a = '../Data/data_3_segnet/mul_class/MA_real/training/masks_blank/'
+	a = '../'
+	#a = misc.imread(t, 'I')
+	
+	#a = '../Data/data_3_segnet/mul_class/MA_cam/masks/'
+	#a = '../Data/data_3_segnet/tmp/tmp_ade_train_00005152/Masks/'
+	#a = '../Data/data_3_segnet/tmp/tmp_ade_train_00005152/Masks/'
+	h,w = 320,320
+	#ims =sorted([s for s in os.listdir(a)])
+	#ims =sorted([s for s in os.listdir(a) if 'tmp' in s])
+	ims =sorted([s for s in os.listdir(a) if '300.png' in s ])
+	ims = ims[0:1]
+	
+	h, w = 320, 320
+	ap = '../Test_Images/MA/test_represent/masks/'
+	a = [s for s in os.listdir(ap) if '300' in s]
+	a_im = misc.imread(ap + a[0], 'I')
+	a_resz = misc.imresize(a_im, [h, w], interp='nearest')
+	
+	new_color = (255,255,255)
+	new_color_bg = (0,0,0)
+	for im in ims:
+		ds = []
+		print '\n',im
+		use_Image_type = False
+		if use_Image_type:
+			picture = Image.open(a+im).convert('LA')
+			#picture.show()
+			datas = picture.getdata()
+			for data in datas:
+				for i in xrange(1):
+					#print 'data[%d]=%d'%(i,data[i])
+					if data[i] not in ds:
+						ds.append(data[i])
+		else:
+			#picture = misc.imread(a+im,'I')
+			picture = a_resz
+			#print picture
+			(h,w) = picture.shape
+			
+			set_thresh = False
+			if set_thresh:
+				thresh = 1
+				idx = picture[:, :] > thresh
+				picture[idx] = thresh
+			print w,h
+			for i in xrange(h):
+				for j in xrange(w):
+					if picture[i][j] not in ds:
+						ds.append(picture[i][j])
+		
+		misc.imshow(picture)
+		if len(ds)>1:
+			print sorted(ds), '\ntotal classes in %s:%d'%(im, len(ds))
+		
+#check_pixel_class_num()
+
+def combine_mask():
+	y = np.array([2,3,45,9])
+	x = np.array([1,4,0,90])
+	m = np.ma.masked_where(y>30,y)
+	m_ = np.ma.masked_where(y>30,x)
+	new_x = x[~m.mask].copy()
+	print list(m),'\n',list(m_),'\n',new_x
+	print '\ncompressed\n',np.ma.compressed(m),np.ma.compressed(m_)
+	print '~', x[~m.mask]
+	
+	bg_mul_label_path = '/home/haiyan/Documents/haiyan_paperwork/2572masks_ana/'
+	LILA_PATH = '../tmp/CAD/lila2/full/mul_in_2_right_position/'
+	
+	h, w = 320, 320
+	# ims =sorted([s for s in os.listdir(a)])
+	ds = [0]  # initial with pixel value 0
+	new_color_fg = (255, 255, 255)
+	new_color_bg = (0, 0, 0)
+	
+	CAD_lilas = [s for s in os.listdir(LILA_PATH)][0:2]
+	ms = sorted([s for s in os.listdir(bg_mul_label_path)])[300:303]
+	m1 = misc.imread(bg_mul_label_path+ms[0])
+	mlila = misc.imread(LILA_PATH+CAD_lilas[0])
+	malila = np.ma.masked_where(mlila>80,mlila)
+	print mlila[~malila.mask]
+	
+	a = '../Data/data_3_segnet/tmp/tmp_ade_train_00005152/Masks/'
+	dirs = [s for s in os.listdir(a)]
+	m1 = misc.imread(a+dirs[0])
+	m2 = misc.imread(a+dirs[1])
+	m3 = misc.imread(a+dirs[2])
+	m1 = np.array(m1)
+	m2 = np.array(m2)
+	m3 = np.array(m3)
+	full = (m1+m2+m3).reshape(m1.shape)
+	
+	misc.imshow(full)
+	misc.imsave(a+'tmp.png',full)
+	print '\n\ncombined result:\n',full
+	check_pixel_class_num()
+#combine_mask()
+# Image.blend(background, overlay, 0.5)
+def blend_2():
+	a = '../tmp/resized/rest1/'
+	dirs = [s for s in os.listdir(a) if 'lila9' in s][0]
+	im1o = Image.open(a+dirs).convert('RGBA')
+	
+	im1 = im1o.crop((0,0,512,512))
+	#im1.thumbnail((320,320),Image.ANTIALIAS)
+	
+	im2o = Image.open(a+'ADE_train_00017825.jpg').convert('RGBA')
+	im2 = im2o.crop((0,0,512,512))
+	#im2.thumbnail((320,320),Image.ANTIALIAS)
+	print 'shape1 %s shape2 %s'%(im1o.size,im2o.size)
+	print 'shape1 %s shape2 %s'%(im1.size,im2.size)
+	merged = im2.copy()
+	Image.blend(im1,im2,0.5)
+	merged.show()
+def read_img():
+	h,w = 320,320
+	ap = '../Test_Images/MA/test_represent/masks/'
+	a = [s for s in os.listdir(ap) if '300' in s]
+	a = a[0]
+	a_im = misc.imread(ap+a,'I')
+	a_resz = misc.imresize(a_im,[h,w],interp='nearest')
+	a_resz = a_resz/255.0
+	#a_resz = a_resz*255.0
+
+	thresh = 1
+	idx = t_im[:, :] > thresh
+	t_im[idx] = thresh
+	
+	idx_ref = a_resz[:,:] > thresh
+	a_resz[idx_ref] = thresh
+	dice_score = calc_dice_simi(t_im, a_resz, '300.png', k=1)
+#misc.imshow(a_resz)
+
+
+t = '../25200_ori.png'
+t_im = misc.imread(t,'I')
+#misc.imshow(t_im)
+image = np.array([t_im for i in range(3)])
+t_im_c = misc.imread(t)
+#misc.imshow(image)
+#image.reshape([320,320,3])
+image_rs = t_im.reshape(320,320,1)
+print 't im shape:', t_im.shape
+print 't image shape:', image.shape
+print 't image reshape:', image_rs.shape
+print 't image c shape:', t_im_c.shape
+	
+lis1 = ['dsd','232']
+lis2 = ['lj','09']
+
+print lis1+lis2
+
+a=np.random.randint(0,256,(2,5))
+print a
+a_1 = a[0:2,2:4]
+print a_1
+
+
+
+
+ File "/home/haiyan/Documents/MA/src/tools_classifier_seg.py", line 2852, in save_tb_imgs
+    urllib.urlretrieve(url_img, save_name)
+  File "/usr/lib/python2.7/urllib.py", line 94, in urlretrieve
+    return _urlopener.retrieve(url, filename, reporthook, data)
+  File "/usr/lib/python2.7/urllib.py", line 240, in retrieve
+    fp = self.open(url, data)
+  File "/usr/lib/python2.7/urllib.py", line 208, in open
+    return getattr(self, name)(url)
+  File "/usr/lib/python2.7/urllib.py", line 352, in open_http
+    'got a bad status line', None)
+IOError: ('http protocol error', 0, 'got a bad status line', None)
+
+
+
+
+ADE_train_00000933.png
+[0, 1,       4,    6, 9, 11, 13, 16, 20, 25, 37, 42, 75, 76, 99, 116, 138, 139]
+[0.0, 1.0, 4.0, 6.0, 9.0, 11.0, 13.0, 16.0, 20.0, 25.0, 37.0, 42.0, 75.0, 76.0, 99.0, 116.0, 138.0, 139.0]
+total classes in ADE_train_00000933.png:18
+
+cad_pub_f_m_001.png
+[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 164, 166, 167, 172]
+total classes in cad_pub_f_m_001.png:166
+
+cad_pub_m_001.png
+[0, 1, 2, 3, 4, 5, 11, 12, 22, 29, 41, 255]
+total classes in cad_pub_m_001.png:12
+
+>>> from scipy.misc import imsave
+>>> x = np.zeros((255, 255))
+>>> x = np.zeros((255, 255), dtype=np.uint8)
+>>> x[:] = np.arange(255)
+>>> imsave('gradient.png', x)
+Construct an array with three colour bands (R, G, B) and store to file:
+
+>>>
+>>> rgb = np.zeros((255, 255, 3), dtype=np.uint8)
+>>> rgb[..., 0] = np.arange(255)
+>>> rgb[..., 1] = 55
+>>> rgb[..., 2] = 1 - np.arange(255)
+>>> imsave('rgb_gradient.png', rgb)
+
+
+a_p1 = '../Data/data_3_segnet/mul_class/MA_real/validation/'
+a_m1 = '../Data/data_3_segnet/mul_class/MA_real/validation/benchmark_masks/'#a_p1 + 'benchmark_masks/'
+#a_im = a_p + 'benchmark_images/'
+
+a_p = '../Data/data_3_segnet/mul_class/MA_real/training/'
+a_m = a_p + '3mula_2extra_masks/'
+
+
+list_m1 = [s for s in os.listdir(a_m1)]
+print 'list_m1:', list_m1[0]
+test_m1 = misc.imread(a_m1 + list_m1[0])
+#misc.imshow(test_m1)
+#test_m1 = np.array([test_m1 for i in xrange(3)])
+
+list_m = [s for s in os.listdir(a_m)]
+test_m = misc.imread(a_m + list_m[0],'I')
+#misc.imshow(test_m)
+
+#test_m = np.array([test_m for i in xrange(3)])
+misc.imsave('../tmp_m.png', test_m)
+print 'shape1:',a_m1,test_m1.shape
+print 'shape:',a_m,test_m.shape
+
+
+a_p = '../Data/data_3_segnet/mul_class/MA_real/training/'
+a_m = a_p + '3mula_2extra_masks/'
+
+dirs = [s for s in os.listdir(a_m)]
+print 'len dirs:', len(dirs)
+print dirs
+for fn in dirs:
+	#validate = misc.imread('../tmp_m.png')
+	validate = misc.imread(a_m + fn)
+	if len(validate.shape) != 2:
+		print 'shape validate:', validate.shape, '  fn:', fn
+	else:
+		print 'valiated'
+a = [[2,3], [1,3], [90,2]]
+validate = misc.imread('../tmp.png','I')
+print 'v shape:', validate.shape
+validate_rsh = np.squeeze(validate, axis=3)
+print 'v shape2:', validate.shape
+print np.ndim(a)
+
+a = [2,3,0]
+a2 = [0,3,0]
+a3 = [1,2,3]
+a4 = [
+	    [[255,0,   0],
+	     [255,0,    0],
+	     [255,0,   0]],
+       
+      [[0, 0,  1],
+       [0, 1,  0],
+       [0, 160,0]],
+       
+      [[0,160.0,0],
+       [0,0,10],
+       [160,160.0,160.0]] ]
+			
+print 'a4 shape', np.array(a4).shape
+comb = np.concatenate((a,a2,a3))
+print comb
+
+a4a = np.array(a4)
+#y = np.array(a4[:,:,:] == [0,0,0]).astype(np.uint32)
+#x = a4.all()
+
+for i in a4a[:,0,0]:
+	print 'i:', i
+#print [x if x == [0, 160,0] else x for x in a4]
+a4a[a4a==255] = 200
+#y = np.array([[0, 200,0] if x == [0, 160,0] else x for x in a4])
+#y= np.all(a4 == np.array([160,160,160]),axis=1)
+print 'a4a: ',a4a
+
+p = '..//Data/data_3_segnet/mul_class/MA_real/training/1masks_3cl_pub/'
+dirs = [s for s in os.listdir(p)]
+#misc.imshow(mask)
+import tools_classifier_seg as tools
+h,w = 320,320
+for fn in dirs:
+	mask = misc.imread(p+fn, mode='RGB')
+	flipped_mask = mask.copy()
+	flipped_mask = np.flip(flipped_mask, 1)
+	print '\nmask shape:', mask.shape
+	n,diff = tools.count_diff_pixel_values(mask[:,:,0], h, w)
+	print 'fn:',fn,n,diff
+	if n != 2:
+		misc.imshow(mask)
+	else:
+		mask[mask<160] = 0
+		mask[mask==160] = 1
+		mask[mask==200] = 2
+		n, diff = tools.count_diff_pixel_values(mask[:, :, 0], h, w)
+		print '======= after fn:', fn, n, diff
+		#misc.imshow(mask*255)
+		flipped_mask[flipped_mask < 160] = 0
+		flipped_mask[flipped_mask == 160] = 1
+		flipped_mask[flipped_mask == 200] = 2
+		n, diff = tools.count_diff_pixel_values(flipped_mask[:, :, 0], h, w)
+		print '======= after fn flip:', fn, n, diff
+		
+psearch = '../Data/data_3_segnet/mul_class/MA_real/training/unten/'
+pfrom = '/home/haiyan/Documents/MA/Data/data_3_segnet/mul_class/MA_real/training/1masks_3cl_pub/'
+pto = '/home/haiyan/Documents/MA/Data/data_3_segnet/mul_class/MA_real/training/unten/mask/'
+dirs_ps = [s for s in os.listdir(psearch)]
+for item in dirs_ps:
+	im = item[:-4]
+	print im
+	im = im.replace('_im_','_m_') + '.png'
+	print 'im2',im
+	cmd = 'mv ' + pfrom + im + ' ' + pto
+	os.system(cmd)
+
+
+# Random Shifts
+from keras.datasets import mnist
+from keras.preprocessing.image import ImageDataGenerator
+from matplotlib import pyplot
+from keras import backend as K
+K.set_image_dim_ordering('th')
+# load data
+h,w = 320,320
+X_train, y_train = load_and_preprocess_data_k(h, w)
+#(X_train, y_train), (X_test, y_test) = mnist.load_data()
+# reshape to be [samples][pixels][width][height]
+#X_train = X_train.reshape(X_train.shape[0], 1, h, w)
+#y_train = y_train.reshape(y_train.shape[0], 1, h, w)
+#X_test = X_test.reshape(X_test.shape[0], 1, 28, 28)
+# convert from int to float
+#X_train = X_train.astype('float32')
+#X_test = X_test.astype('float32')
+# define data preparation
+shift = 0.2
+data_gen_args = dict(
+                     height_shift_range=shift,
+											width_shift_range=shift,
+                     )
+datagen = ImageDataGenerator(**data_gen_args)
+m_datagen = ImageDataGenerator(**data_gen_args)
+# fit parameters from data
+seed = 1
+datagen.fit(X_train,seed=seed)
+m_datagen.fit(y_train,seed=seed)
+
+im_path_folder = PROJ_DIR + 'Data/MA_cad/training/others/2images_6cl_folder/'
+m_path_folder = PROJ_DIR + 'Data/MA_cad/training/others/2masks_ex_ring_folder'
+
+im_generator = datagen.flow_from_directory(
+	im_path_folder,
+	class_mode=None,shuffle=False,
+	seed=seed)
+
+mask_generator = m_datagen.flow_from_directory(
+	m_path_folder,
+	class_mode=None,shuffle=False,
+	seed=seed)
+
+
+from itertools import *
+train_generator = izip(im_generator, mask_generator)
+print 'train_generator:', train_generator
+#mask_datagen = ImageDataGenerator(**data_gen_args)
+# configure batch size and retrieve one batch of images
+show_fig = True
+batch_size = 3
+if show_fig:
+	fig1 = pyplot.figure()
+	for X_batch in datagen.flow(X_train,batch_size=batch_size):
+		# create a grid of 3x3 images
+		for i in range(0, batch_size):
+			pyplot.subplot(330 + 1 + i) #first 3 digits 330 are definition for position
+			pyplot.imshow(X_batch[i].reshape(h, w), cmap=pyplot.get_cmap('gray'))
+		# show the plot
+		pyplot.show()
+		break
+	fig3 = pyplot.figure()
+	for y_batch in m_datagen.flow(y_train, batch_size=batch_size):
+		# create a grid of 3x3 images
+		for j in range(0, batch_size):
+			pyplot.subplot(330 + 1 + j)
+			pyplot.imshow(y_batch[j].reshape(h, w), cmap=pyplot.get_cmap('gray'))
+		# show the plot
+		pyplot.show()
+		break
+
+	
+
+
+def load_and_preprocess_data_k(h, w):
+	import tools_classifier_seg as tools
+	
+	data_path = PROJ_DIR + '/Data/MA_cad/training/'  # main_path
+	
+	print 'train_path:', data_path
+	
+	#####################################################################################
+	# im_path = data_path + 'others/2images_6cl/'  # for both masks_mul and masks_mul_1extra
+	# m_path = data_path + 'others/2masks_ex_ring/' #2masks_ex_ring
+	im_path = PROJ_DIR + 'Data/MA_cad/training/others/2images_6cl_folder/images/'
+	m_path = PROJ_DIR + 'Data/MA_cad/training/others/2masks_ex_ring_folder/masks/'
+	# im_path = data_path + '4images_exp2/'  # for both masks_mul and masks_mul_1extra
+	# m_path = data_path + '4masks_exp2_ex_ring/' #2masks_ex_ring
+	
+	data_1s = sorted([s for s in os.listdir(im_path)])  # if 'out' in s])
+	m_1s = sorted([s for s in os.listdir(m_path)])  # if 'out' in s])
+	# data_1s = data_1s[100:]
+	data_1s = data_1s[0:33] + data_1s[114:116] + data_1s[127:136]  # 33
+	# m_1s = m_1s[100:]
+	
+	images, masks = tools.import_data_k_segnet(im_path, m_path, data_1s, m_1s, h, w, len(data_1s), MUL=False,
+	                                           do_Flipping=False, do_gblur=True, do_darken=True)
+	# im_path,label_path, file_imgs, file_masks, h, w, maxNum, MUL=False,
+	# do_Flipping=False,do_gblur=False
+	do_reduce_mean = True
+	if do_reduce_mean:
+		images = tools.reduce_mean_stdev(images)
+	#####################################################################################
+	
+	print 'images shape after mean reduction:', images.shape  # images shape: (849, 33856, 1) example 6c
+	return images, masks
+
+
+im_path4 = '../Data/MA_cad/training/others/2images_profile_best/'
+#im_path4 = '../Data/MA_cad/training/4images_exp2/'
+#m_path4 = '../Data/MA_cad/training/4masks_exp2_ex_ring/'
+m_path4 = '../Data/MA_cad/training/others/2masks_profile_best/'
+a = ['1','2efa','3sdf','4po','5p09','6sd']
+data_1s = sorted([s for s in os.listdir(im_path4)])
+m_1s = sorted([s for s in os.listdir(m_path4)])
+acon = a[1] + a[3]
+#img_no = ['1','2','4','6',8,7,9,10,13,14,17,18,21,27,29,30,31,33,34,37]
+img_no = [1,2,4,6,8,7,9,10,13,14,17,18,21,27,29,30,31,33,34,37]
+data_1s_final, m_1s_final = [],[]
+for i_n in img_no:
+	imn = data_1s[i_n-1]
+	data_1s_final.append(imn)
+	m_1s_final.append(m_1s[i_n-1])
+	#print imn
+#m_1s = m_1s[0:85]
+print data_1s_final
+print len(img_no),'\n'
+
+for i in xrange(len(data_1s)):
+	print data_1s[i]
+print len(data_1s)
+print '\n'
+for i in img_no:
+	m_1s_final.append(m_1s[i-1])
+	#print m_1s[i-1]
+#print len(m_1s)
+print m_1s_final
+
+
+h,w=320,320
+def find_contour(obj_area, thresh):
+	gray = cv2.resize(np.uint8(obj_area), (h, w))  # direct
+	ret, gray = cv2.threshold(gray, thresh, 255, 0)
+	contours, hierarchy = cv2.findContours(gray, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)  # 1
+	if len(contours) > 0:
+		screen_out = True
+	else:
+		screen_out = False
+	return contours, screen_out
+
+p = '../tmp_m.png'
+from PIL import Image,ImageFilter
+from pylab import *
+im = Image.open(p)
+#im = im.filter(ImageFilter.FIND_EDGES)
+#im = im.filter(ImageFilter.CONTOUR)
+contours,screen_out = find_contour(im,250)
+from matplotlib import path
+contour = contours[0]
+
+c = contour[:,0]
+tmin = min(c[:,0])
+rmax = max(c[:,1])
+print 'contour', contour
+print 'c:',c, '\nc[0]:',c[0],'tmin',tmin,',rmax:',rmax
+#path = path.Path(con)
+
+top = min(c[0])
+bottom = max([0])
+left = min(c[1])
+right = max(c[:,0][1])
+
+new_image = np.zeros([bottom-top,right-left])
+
+#print new_image
+new_image.show()
+import ImageOps
+im_b = ImageOps.expand(new_image,border=4,fill='red')
+im_b.show()
+
+w,h = 32,32
+p = '../testbench/k_imgs/big_white_bg/'
+p_base = '../Test_Images/MA/test_represent/images/'
+imp = p + '/21001test_11-0.27_d0.726_used_thr50_rev_mask_hinten_outside_im_1220.png'
+imp = p + '/21001test_11-0.27_d0.726_used_thr50_rev_mask_hinten_offi_im_740.png'
+imp_base = p_base + '/hinten_outside_im_1220.jpg'
+im = cv2.imread(imp)
+im_b = cv2.imread(imp_base)
+#im = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
+im = cv2.resize(im,(h,w))
+im_b = cv2.resize(im_b,(h,w))
+im = im.reshape((h,w,3))
+im_b = im_b.reshape((h,w,3))
+print im.shape
+
+
+def get_roi_in_white_bg_seg(roi, base_img, w, h, factor=1):
+	roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+	roi_PIL = Image.fromarray(roi_gray)
+	datas_obj = roi_PIL.getdata()
+	
+	fr = cv2.cvtColor(base_img, cv2.COLOR_BGR2RGB)
+	fr_PIL = Image.fromarray(fr)
+	datas_fr = fr_PIL.getdata()
+	
+	new_im = Image.new("RGB", (w, h))  ## default black!
+	new_im.paste((255, 255, 255), (0, 0, w, h))  ##
+	datas_roi = new_im.convert("RGBA")
+	
+	newData = []
+	
+	def white(data_obj):
+		if data_obj[0] == 255 and data_obj[1] == 255 and data_obj[2] == 255:
+			white = True
+		else:
+			white = False
+		return white
+	
+	# debug
+	# print 'datas_obj format', datas_obj.size
+	
+	# way 1
+	
+	wh_count = 0
+	lower_bound = 30
+	#find top,bottom,left,right
+	top,bottom,left,right = 0,0,0,0
+	for data_obj, data_fr, index in zip(datas_obj, datas_fr, xrange(h*w)):
+		if not white(data_obj) and index < h*0.5*w:
+			wh_count += 1
+			if index%w == 0:
+				wh_count = 0
+				
+			if wh_count > 3:
+				top = index
+				break
+		else:
+			top = h*0.5
+			
+	print 'top/h:', top/h
+	for data_obj, data_fr, index in zip(datas_obj, datas_fr, xrange(h * w)):
+		if index > 0.5*h*w and not white(data_obj):
+			wh_count += 1
+			if index % w == 0:
+				wh_count = 0
+			
+			if wh_count > 3:
+				bottom_backup = index
+				if bottom < bottom_backup:
+					bottom = bottom_backup
+		else:
+			pass
+				
+	## convert PIL back to CV2
+	print 'bottom/h:', bottom/h
+	last_pos = h
+	
+	for data_obj, data_fr, index in zip(datas_obj, datas_fr, xrange(h * w)):
+		if index < 0.5 * h * w and not white(data_obj):
+			wh_count += 1
+			last_pos = index
+			if index % w == 0:
+				wh_count = 0
+			
+			if wh_count > 3:
+				left_backup = index
+				if left < left_backup:
+					left = left_backup
+		else:
+			pass
+	
+	## convert PIL back to CV2
+	print 'left/h:', left / h
+	
+	datas_roi.putdata(newData)
+	pil_image = datas_roi.convert('RGB')
+	open_cv_image = np.array(pil_image)
+	# Convert RGB to BGR
+	open_cv_image = open_cv_image[:, :, ::-1].copy()
+	
+	if datas_obj.size > 0:
+		largest_areas = sorted(contours, key=cv2.contourArea)
+		x, y, box_w, box_h = get_bounding_box(largest_areas[-1], open_cv_image)  # x,y:top-left coord
+		if box_w > 30 and box_h > 30:
+			screen_out = True
+			print 'x, y, w, h', x, y, box_w, box_h
+			box_h = int(0.99 * box_h)
+			box_w = int(0.99 * box_w)
+			open_cv_image = open_cv_image[y:y + box_h, x:x + box_w]  # [crop_y1:crop_y2, crop_x1:crop_x2]
+			open_cv_image = cv2.resize(np.uint8(open_cv_image), (h, w))
+		else:
+			screen_out = False
+	else:
+		screen_out = False
+	screenout = True
+	return open_cv_image, screenout
+
+
+def get_bounding_box(conture, img=None):
+	""" Calculates the bounding box of a ndarray"""
+	# get approx, return index
+	# epsilon = 0.1 * cv2.arcLength(x, True)
+	# approx_box = cv2.approxPolyDP(x, epsilon, True)
+	# print 'app box', approx_box  # Min [[[ 56  85]]  [[318 231]]]
+	# leftpointX = approx_box[0][0][0]
+	# print 'app box 2', leftpointX  # Min [[[ 56  85]] Max [[318 231]]]
+	# approx_box_s = int(0.9*approx_box)
+	# print 'app box s',approx_box_s
+	
+	# get rectangle
+	x, y, w, h = cv2.boundingRect(conture)  # x,y: top-left coordinate
+	# draw rectangle
+	cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+	cv2.waitKey(2)
+	return (x, y, w, h)
+
+#open_cv_image, screenout = get_roi_in_white_bg_seg(im, im_b,w,h)
+#if screenout:
+	#cv2.imshow('open', open_cv_image)
+
+im_cv = cv2.resize(cv2.imread(imp),(32,32))
+
+im_pil = cv2.cvtColor(im_cv, cv2.COLOR_BGR2RGB)
+im = Image.fromarray(im_pil)
+im = im.convert('LA')  # convert Image object image to gray
+pix = im.load()
+w, h = im.size
+print 'w,h:', w,h
+wh_count,t,b,l,r = 0,0,0,0,0
+ts,bs,ls,rs = [],[],[],[]
+t_counts, b_counts, l_counts, r_counts = [], [], [], []
+limit = 1
+set_break = False #t
+for y in xrange(h):
+	wh_count = 0
+	for x in xrange(w):
+		if pix[x,y] != (255,255):
+			wh_count += 1
+		if wh_count > limit:
+			t_counts.append(wh_count)
+
+limit = np.median(sorted(t_counts))
+print 't_median t', limit
+for y in xrange(h):
+	wh_count = 0
+	if set_break:
+		break
+	for x in xrange(w):
+		#print pix[x,y]
+		if pix[x,y] != (255,255):
+			wh_count += 1
+		if wh_count > limit:
+			t = y
+			set_break = True
+			break
+		
+limit = 1
+for y in xrange(h):
+	wh_count = 0
+	for x in xrange(w):
+		#print pix[w-x-1,h-y-1]
+		if pix[w-x-1,h-y-1] != (255,255):
+			wh_count += 1
+		if wh_count > limit:
+			b_counts.append(wh_count)
+
+limit = np.median(sorted(b_counts))
+print 'limit b', limit
+#b_mean = np
+set_break = False #b
+for y in xrange(h):
+	wh_count = 0
+	if set_break:
+		break
+	for x in xrange(w):
+		#print pix[w-x-1,h-y-1]
+		if pix[w-x-1,h-y-1] != (255,255):
+			wh_count += 1
+		if wh_count > limit:
+			b = h-y-1
+			set_break = True
+			break
+
+
+###################################
+limit = 1
+for x in xrange(w):
+	wh_count = 0
+	for y in xrange(h):
+		#print pix[w-x-1,h-y-1]
+		if pix[x,y] != (255,255):
+			wh_count += 1
+		if wh_count > limit:
+			l_counts.append(wh_count)
+limit = np.median(sorted(l_counts))
+
+set_break = False #l
+for x in xrange(w):
+	wh_count = 0
+	if set_break:
+		print 'x:',wh_count
+		break
+	for y in xrange(h):
+		#print pix[w-x-1,h-y-1]
+		if pix[x,y] != (255,255):
+			wh_count += 1
+		if wh_count > limit:
+			l = x
+			print wh_count
+			set_break = True
+			break
+
+################################
+limit = 1
+for x in xrange(w):
+	wh_count = 0
+	for y in xrange(h):
+		#print pix[w-x-1,h-y-1]
+		if pix[w-x-1,h-y-1] != (255,255):
+			wh_count += 1
+		if wh_count > limit:
+			r_counts.append(wh_count)
+			
+limit = np.median(sorted(r_counts))
+
+set_break = False #r
+for x in xrange(w):
+	wh_count = 0
+	if set_break:
+		break
+	for y in xrange(h):
+		#print pix[w-x-1,h-y-1]
+		if pix[w-x-1,h-y-1] != (255,255):
+			wh_count += 1
+		if wh_count > limit:
+			r = w-x-1
+			set_break = True
+			break
+
+
+print 't,b,l,r', t, ',', b, ',', l,',',r
+x,y,w,h = l,t, (r-l), (b-t)
+cv2.rectangle(im_cv,(x,y),(x+w,y+h),(0,255,0),2)
+cv2.putText(im_cv,'Moth Detected',(x+w+10,y+h),0,0.3,(0,255,0))
+cv2.imshow('imcv',im_cv)
+
+
+x,y,w,h = l*10,t*10, (r-l)*10, (b-t)*10
+cv2.rectangle(im_cv,(x,y),(x+w,y+h),(0,255,0),2)
+cv2.putText(im_cv,'Moth Detected',(x+w+10,y+h),0,0.3,(0,255,0))
+im_cv_ori = cv2.resize(im_cv,(320,320))
+cv2.imshow('imcv10',im_cv_ori)
+cv2.waitKey()
+
+
+
+def add_dark(im, show=False, save_file=False):
+	img_copy = im
+	img_copy = cv2.resize(img_copy, (184, 184))
+	
+	dark_img = cv2.cvtColor(img_copy, cv2.COLOR_BGR2RGB)
+	dark_img = Image.fromarray(dark_img)  # Image.fromarray(im1misc)
+	rnd_darkness = 0.01 * randint(29, 150)
+	dark_img = dark_img.point(lambda p: p * rnd_darkness)
+	dark_img = cv2.cvtColor(np.array(dark_img), cv2.COLOR_RGB2GRAY)
+	#dark_img = cv2.cvtColor(np.array(dark_img), cv2.COLOR_BGR2RGB)
+	print dark_img.shape
+	cv2.imshow('tmp', dark_img)
+	
+	#cv2.imwrite('../tmp_k1.png', dark_img)
+	cv2.waitKey()
+	INPUT_CH = 1
+	if INPUT_CH == 1:
+		dark_img = cv2.imread('../tmp_k1.png', 0)
+	else:
+		dark_img = cv2.imread('../tmp_k1.png')
+	
+	#cmd = 'rm ../tmp_k1.png'
+
+p = '../testbench/k_imgs/big_white_bg/'
+p_base = '../Test_Images/MA/test_represent/images/'
+#imp = p + '/21001test_11-0.27_d0.726_used_thr50_rev_mask_hinten_outside_im_1220.png'
+imp = p + '/21001test_11-0.27_d0.726_used_thr50_rev_mask_hinten_offi_im_740.png'
+im = cv2.imread(imp)
+add_dark(im)
+#im = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
+
+
+#cut
+p_in = '/home/haiyan/Documents/haiyan_paperwork/MA_matlabimgs_14Aug/CAD_cam_compare/firstVersion_not_resized/'
+save_to_p = '/home/haiyan/Documents/haiyan_paperwork/MA_matlabimgs_14Aug/CAD_cam_compare/resized_cadcam/'
+#imp = p + '/21001test_11-0.27_d0.726_used_thr50_rev_mask_hinten_outside_im_1220.png'
+fname = 'unten_cad'
+ftype = '.png'
+imp = p_in + fname + ftype
+imp = '../testbench/tf_imgs/preds/pred255_8.png'
+
+im = cv2.imread(imp,0)
+im_rgb = cv2.imread(imp)
+im_rz = cv2.resize(im,(320,320))
+
+
+
+#misc_im = misc.imread(imp)
+#misc.imshow(misc_im)
+#print 'shape: misc ', misc_im.shape
+cv2.imshow('input',im_rz)
+
+
+res = np.uint8(im_rz)
+
+
+def get_bounding_box(conture, img=None):
+	""" Calculates the bounding box of a ndarray"""
+	# get approx, return index
+	# epsilon = 0.1 * cv2.arcLength(x, True)
+	# approx_box = cv2.approxPolyDP(x, epsilon, True)
+	# print 'app box', approx_box  # Min [[[ 56  85]]  [[318 231]]]
+	# leftpointX = approx_box[0][0][0]
+	# print 'app box 2', leftpointX  # Min [[[ 56  85]] Max [[318 231]]]
+	# approx_box_s = int(0.9*approx_box)
+	# print 'app box s',approx_box_s
+	
+	# get rectangle
+	x, y, w, h = cv2.boundingRect(conture)  # x,y: top-left coordinate
+	# draw rectangle
+	cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+	cv2.waitKey(10)
+	return (x, y, w, h)
+
+
+def find_contour(obj_area, thresh):
+	h,w = 320, 320
+	gray = cv2.resize(np.uint8(obj_area), (h, w))  # direct
+	ret, gray = cv2.threshold(gray, thresh, 255, 0)
+	contours, hierarchy = cv2.findContours(gray, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)  # 1
+	if len(contours) > 0:
+		screen_out = True
+	else:
+		screen_out = False
+	return contours, screen_out
+
+
+#kernel = np.ones((3, 3), np.uint8)
+#erosion = cv2.erode(res, kernel, iterations=1)
+#res = cv2.dilate(erosion, kernel, iterations=1)
+do_seg = True
+w,h = 320,320
+max_x, max_y = 0,0
+if do_seg:
+	contours, screen_out = find_contour(im_rz,10)
+	print 'screen_out', screen_out
+	sortedCont = sorted(contours, key=cv2.contourArea)
+	#print 'largest',sortedCont[-1]
+	rects = []
+	cv2.drawContours(res, [sortedCont[-1]], 0, (255, 255, 255, 255), -1)
+	cv2.imshow('morph_p255', res)
+	
+	for i in sortedCont:
+		item = get_bounding_box(i)
+		if item[2] > 20 and item[3] > 2:
+			w,h = item[2],item[3]
+			cv2.rectangle(im_rgb, (item[0], item[1]), (item[0] + w, item[1] + h), (0, 255, 0), 2)
+			
+			cv2.imshow('imrgb',im_rgb)
+			rects.append(item)
+	
+	#max_x = max(rects[0])
+	#rects = rects[0:2]
+	print 'rects:', rects
+	
+	groupThreshold = 2
+	eps = 0.1
+	rectList, weights = cv2.groupRectangles(rects, groupThreshold, eps)
+	print rectList, weights
+
+#im_rz = cv2.cvtColor(im_rz,cv2.COLOR_RGB2BGR)
+#np.array(digits.images), 2).astype(np.float32)
+#cv2.imshow('i-after',im_rz)
+
+#image = tools.reduce_mean_stdev(image)
+
+#image = image.reshape(-1, 320, 320, 3)
+#print 'shape:', im_rz
+#cv2.imwrite(save_to_p + fname + '_rz.png', im_rz)
+cv2.waitKey()
+
+
+
+def get_roi_with_white_bg_cut(roi, base_img, w, h, factor=1):
+	#cv2.imwrite('../roi.png',roi)
+	ret,mask = cv2.threshold(roi,254,255,cv2.THRESH_BINARY_INV)
+	x, y, box_w, box_h = get_bounding_box_with_limit(mask)  # x,y:top-left coord
+	print 'get_white_cut,size',roi.shape,'base size',base_img.shape
+	if box_w > 3 and box_h > 3:
+		screen_out = True
+		if FLAGS.INFO_0:
+			print 'x, y, w, h', x, y, box_w, box_h
+	else:
+		screen_out = False
+		x, y, box_w, box_h = 0, 0, 0, 0
+	return x, y, box_w, box_h, screen_out
+
+
+def get_bounding_box_with_limit(im_cv):
+  im_pil = im_cv.copy()
+  if len(im_cv.shape) == 3:
+    im_pil = cv2.cvtColor(im_cv, cv2.COLOR_BGR2RGB)
+  im = Image.fromarray(im_pil)
+  im = im.convert('LA')  # convert Image object image to gray
+  pix = im.load()
+  w, h = im.size
+  print 'w,h:', w, h
+  wh_count, t, b, l, r = 0, 0, 0, 0, 0
+  ts, bs, ls, rs = [], [], [], []
+  t_counts, b_counts, l_counts, r_counts = [], [], [], []
+  limit = 1
+  set_break = False  # t
+  for y in xrange(h):
+    wh_count = 0
+    for x in xrange(w):
+      if pix[x, y] != (255, 255):
+        wh_count += 1
+      if wh_count > limit:
+        t_counts.append(wh_count)
+  
+  limit = np.median(sorted(t_counts))
+  print 't_median t', limit
+  for y in xrange(h):
+    wh_count = 0
+    if set_break:
+      break
+    for x in xrange(w):
+      # print pix[x,y]
+      if pix[x, y] != (255, 255):
+        wh_count += 1
+      if wh_count > limit:
+        t = y
+        set_break = True
+        break
+  
+  limit = 1
+  for y in xrange(h):
+    wh_count = 0
+    for x in xrange(w):
+      # print pix[w-x-1,h-y-1]
+      if pix[w - x - 1, h - y - 1] != (255, 255):
+        wh_count += 1
+      if wh_count > limit:
+        b_counts.append(wh_count)
+  
+  limit = np.median(sorted(b_counts))
+  print 'limit b', limit
+  # b_mean = np
+  set_break = False  # b
+  for y in xrange(h):
+    wh_count = 0
+    if set_break:
+      break
+    for x in xrange(w):
+      # print pix[w-x-1,h-y-1]
+      if pix[w - x - 1, h - y - 1] != (255, 255):
+        wh_count += 1
+      if wh_count > limit:
+        b = h - y - 1
+        set_break = True
+        break
+  
+  ###################################
+  limit = 1
+  for x in xrange(w):
+    wh_count = 0
+    for y in xrange(h):
+      # print pix[w-x-1,h-y-1]
+      if pix[x, y] != (255, 255):
+        wh_count += 1
+      if wh_count > limit:
+        l_counts.append(wh_count)
+  limit = np.median(sorted(l_counts))
+  
+  set_break = False  # l
+  for x in xrange(w):
+    wh_count = 0
+    if set_break:
+      print 'x:', wh_count
+      break
+    for y in xrange(h):
+      # print pix[w-x-1,h-y-1]
+      if pix[x, y] != (255, 255):
+        wh_count += 1
+      if wh_count > limit:
+        l = x
+        print wh_count
+        set_break = True
+        break
+  
+  ################################
+  limit = 1
+  for x in xrange(w):
+    wh_count = 0
+    for y in xrange(h):
+      # print pix[w-x-1,h-y-1]
+      if pix[w - x - 1, h - y - 1] != (255, 255):
+        wh_count += 1
+      if wh_count > limit:
+        r_counts.append(wh_count)
+  
+  limit = np.median(sorted(r_counts))
+  
+  set_break = False  # r
+  for x in xrange(w):
+    wh_count = 0
+    if set_break:
+      break
+    for y in xrange(h):
+      # print pix[w-x-1,h-y-1]
+      if pix[w - x - 1, h - y - 1] != (255, 255):
+        wh_count += 1
+      if wh_count > limit:
+        r = w - x - 1
+        set_break = True
+        break
+  
+  print 't,b,l,r', t, ',', b, ',', l, ',', r
+  x, y, bw, bh = l, t, (r - l), (b - t)
+  return x, y, bw, bh
+
+def get_roi_in_white_bg_seg(roi, base_img, w, h, factor=1):
+  roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+  roi_PIL = Image.fromarray(roi_gray)
+  datas_obj = roi_PIL.getdata()
+  
+  fr = cv2.cvtColor(base_img, cv2.COLOR_BGR2RGB)
+  fr_PIL = Image.fromarray(fr)
+  datas_fr = fr_PIL.getdata()
+  
+  new_im = Image.new("RGB", (w, h))  ## default black!
+  new_im.paste((255, 255, 255), (0, 0, w, h))  ##
+  datas_roi = new_im.convert("RGBA")
+  
+  newData = []
+  
+  def white(data_obj):
+    if data_obj[0] == 255 and data_obj[1] == 255 and data_obj[2] == 255:
+      white = True
+    else:
+      white = False
+    return white
+
+  # debug
+  # print 'datas_obj format', datas_obj.size
+  
+  # way 1
+  for data_obj, data_fr in zip(datas_obj, datas_fr):
+    if white(data_obj):
+      newData.append((data_fr[0], data_fr[1], data_fr[2]))
+    else:
+      newData.append((255, 255, 255))
+      
+      ## convert PIL back to CV2
+  datas_roi.putdata(newData)
+  pil_image = datas_roi.convert('RGB')
+  open_cv_image = np.array(pil_image)
+  # Convert RGB to BGR
+  open_cv_image = open_cv_image[:, :, ::-1].copy()
+  
+  screenout = True
+  return open_cv_image, screenout
+
+
+#im = cv2.resize(im,(950,950),interpolation=cv2.INTER_CUBIC)#down=cv2.INTER_AREA) #upsamp cv2.INTER_CUBIC
+#cv2.imwrite(p2+item,im)
+p = '../'
+p2 = '/home/haiyan/Documents/haiyan_paperwork/MA_matlabimgs_14Aug/CAD_cam_compare/firstVersion_not_resized/'
+flist = [s for s in os.listdir(p) if 'vorn_2_outside_im_8760' in s]
+print 'flist', flist
+for item in flist:
+	im = cv2.imread(p+item)
+	cv2.imshow('im',im)
+x, y, bw, bh = get_bounding_box_with_limit(im)
+new_im = im[y:y+bh,x:x+bw]
+cv2.imshow('new',new_im)
+cv2.waitKey()
+
+
+
+#check mask values
+p = '/home/haiyan/Documents/MA/'
+p2 = '/home/haiyan/Documents/MA/Data/MA_cad/training/others/2masks_6cl_ex_ring/'
+flist = [s for s in os.listdir(p) if 'ma_vggfcn_pred' in s]
+im = misc.imread(p+flist[0])
+#im = cv2.imread(p+flist[0])
+im = np.float32(im)
+#im_float = im / 255.
+
+im_float = np.uint8(np.array(im))
+#misc.imshow(im_float)
+#im_float_exp = np.expand_dims(im_float, 2).astype(np.float32)
+res_count=tools.count_diff_pixel_values(im_float,320,320)
+#print res_count
+dim = len(im_float.shape)
+print 'dim:', dim, res_count
+im_float_p = np.zeros((1 , 320, 320, dim))
+thresh_res_at,ceiling_to_pixel_value = 120, 255
+idx = im_float[:, :] > thresh_res_at
+im_float[idx] = ceiling_to_pixel_value
+cv2.imshow('fl',im_float)
+cv2.imwrite('../ma_vggfcn_pred_th.png',im_float)
+cv2.waitKey()
+          
+if dim == 3:
+  im_float_p = im_float[10][10][1]
+if dim == 2:
+  im_float_p = im_float[10][10]
+print im_float.shape #, im_float_p
+for i in xrange(100,110):
+  for j in xrange(100,110):
+    if dim == 3:
+      print im_float[i][j][0],
+    if dim == 2:
+      print im_float[i][j],
+
+import random
+data_path = PROJ_DIR + '/Data/MA_cad/training/'
+im_path = data_path + 'others/2images_6cl/'
+label_path = data_path + 'others/2masks_6cl/'
+# im_path = '/home/haiyan/Documents/MA/Data/MA_r_pub/ADEChallengeData2016/training/images/'  # for both masks_mul and masks_mul_1extra
+# label_path = '/home/haiyan/Documents/MA/Data/MA_r_pub/ADEChallengeData2016/training/annotations/'
+
+black = np.zeros((320,320,3),np.uint8)
+r1,r2,c1,c2 = 0,50,0,80
+area = [[c1,r1],[c2,r1],[c2,r2],[c1,r2]]
+ctr = np.array(area).astype(np.int32)
+cv2.rectangle(black, (c1, r1), (c2, r2), color=(0, 255, 0), thickness=2)
+#cv2.drawContours(black, [largest_areas[-1]], 0, (255, 255, 255, 255), -1)
+cv2.drawContours(black, [ctr], 0, (255, 255, 255, 255), -1)
+cv2.imshow('blk_area',black)
+#cv2.imshow('blk_area',black)
+cv2.waitKey()
+
+import settings
+
+folders = settings.LABELS
+#folders = ['hinten', 'links', 'oben', 'rechts', 'unten', 'vorn']
+print 'folders:',folders
+total_files_im, total_files_m = [], []
+all_read_path_im, all_read_path_m = [], []
+for folder in folders:
+	
+	read_path_im = PROJ_DIR + '/Test_Images/MA/test_represent/6classifier_seg/im/' + folder
+	read_path_m = PROJ_DIR + '/Test_Images/MA/test_represent/6classifier_seg/m/' + folder
+	
+	files_im = sorted([s for s in os.listdir(read_path_im)])
+	files_m = sorted([s for s in os.listdir(read_path_m)])
+	total_files_im = total_files_im + files_im
+	total_files_m = total_files_m + files_m
+	
+	all_read_path_im.append(read_path_im)
+	all_read_path_m.append(read_path_m)
+
+print 'len files', len(total_files_im), total_files_im[2:6]
+print 'len files m', len(total_files_m), total_files_m[2:6]
+print '\n###################'
+print 'path:', all_read_path_im
+
+
+def demo_stacked_n_col_images(prefix, fn, list_of_imgs, winname, screen_out, save_im=False):  # 2
+	width = len(list_of_imgs)
+	if screen_out:  # and not FLAGS.CLOSE_ALL:
+		max_r, c_comb, dim_im = 0, 0, 2
+		for im in list_of_imgs:
+			if len(im.shape) == 3:
+				r_im, c_im, dim_im = im.shape
+			else:
+				r_im, c_im = im.shape
+			
+			c_comb += c_im
+			if r_im > max_r:
+				max_r = r_im
+				print 'maxr', max_r
+		
+		r_comb = max_r
+		frame_border = 1
+		c_comb = c_comb + (width - 1) * frame_border
+		comb_im = np.zeros(shape=(r_comb, c_comb, dim_im), dtype=np.uint8)
+		white = np.zeros(shape=(r_comb, frame_border, dim_im), dtype=np.uint8)
+		white2 = np.zeros(shape=(r_comb, frame_border), dtype=np.uint8)
+		white.fill(255)
+		white2.fill(255)
+		
+		current_column = 0
+		for im in list_of_imgs:
+			if len(im.shape) == 3:
+				comb_im[:(im.shape[0]), current_column:current_column + im.shape[1]] = im
+				if current_column + im.shape[1] < c_comb:
+					comb_im[:(im.shape[0]), current_column + im.shape[1]:current_column + im.shape[1] + frame_border] = white
+			else:
+				comb_im[:(im.shape[0]), current_column:current_column + im.shape[1]] = im[:, :, None]
+				if current_column + im.shape[1] < c_comb:
+					comb_im[:(im.shape[0]), current_column + im.shape[1]:current_column + im.shape[1] + frame_border] = white2[:,
+					                                                                                                    :, None]
+			
+			current_column = current_column + im.shape[1] + frame_border
+		
+		cv2.imshow(winname, comb_im)
+	else:
+		print 'no roi found - for demo stacked images'
+	print 'comb im shape:', comb_im.shape
+	return comb_im
+#cv2.putText(stat, "1: " + label_pred_str,		            org=(txt_col1, 60),		            fontFace=cv2.FONT
+            #NT_HERSHEY_SIMPLEX, fontScale=frontsize_stat, color=tp_color, thickness=thickness)
+a = np.zeros((320,320,3),np.uint8)
+a.fill(255)
+res = 0.0000000000009
+str_n = '{:.4f}'.format(res)
+cv2.putText(a,'a b c'+str_n,(30,60),cv2.FONT_HERSHEY_SIMPLEX,1.2,(0,0,0),2)
+cv2.putText(a,'a b c',(30,120),cv2.FONT_HERSHEY_SIMPLEX,1.2,(0,0,255),2)
+cv2.putText(a,'a b c',(30,150),cv2.FONT_HERSHEY_SIMPLEX,1.2,(0,35,0),2)
+cv2.putText(a,'a b c',(30,180),cv2.FONT_HERSHEY_SIMPLEX,1.2,(0,255,0),2)
+cv2.putText(a,'a b c',(30,210),cv2.FONT_HERSHEY_SIMPLEX,1.2,(255,0,0),2)
+cv2.putText(a,'a b c',(30,240),cv2.FONT_HERSHEY_SIMPLEX,1.2,(255,255,0),2)
+s = (160,160)
+a_rz = cv2.resize(a,(160,160))
+cv2.imshow('rz',a_rz)
+path='../Data/MA_cad/training/'+'others/2images_6cl/'
+ims = [s for s in os.listdir(path)]
+ims = ims[0:4]
+#list_of_imgs = [cv2.resize(a,(s)), a_rz, a_rz, a_rz]
+list_of_imgs = []
+for im in ims:
+	img = cv2.imread(path+im)
+	img_rz = cv2.resize(img,(160,160))
+	#cv2.imshow('img',img_)
+	#list_of_imgs.append(img)
+	list_of_imgs.append(img_rz)
+	list_of_imgs.append(a_rz)
+	demo_stacked_n_col_images('p', 'f', list_of_imgs, '', True, save_im=False)
+print 'shape:', len(list_of_imgs)
+#cv2.imshow('a',a)
+#cv2.imshow('resize',a_rz)
+cv2.waitKey()
+
+
+
+path = '../Test_Images/'
+file = path+'Tf_red_good.png'
+#file = path+'vorn_ww1_1_ex3_4_rz400.jpg'
+print 'file:', file
+cva = cv2.imread(file)
+cva_bl = cv2.cvtColor(cva,cv2.COLOR_RGB2BGR)
+#cv2.imshow('f',cva_bl)
+cva_bl = cv2.resize(cva_bl,(320,320))
+cv2.imwrite(path+'blue_test1_rz.jpg',cva_bl)
+a = misc.imread(file)
+#misc.imshow(a)
+cv2.waitKey()
+#a_float = np.uint8(np.array(a))
+#a_float.imshow()
+
+
+# resize and save images
+path = '/home/haiyan/Documents/MA/Test_Images/MA/test_represent/takenout/'
+folders = ['images/']
+for f in folders:
+	ims = [s for s in os.listdir(path + f) if 'vorn_offi_f1_im_2580' in s]
+	for im in ims:
+		img = cv2.imread(path + f + im)
+		f_name, ext = os.path.splitext(im)
+		img = cv2.resize(img, (1920,1080), interpolation=cv2.INTER_CUBIC)
+		#cv2.imshow('tmp',img)
+		cv2.imwrite(path + f + f_name + '_resized.jpg', img)
+		#cv2.waitKey()
+	
+
+path = '/home/haiyan/Documents/haiyan_paperwork/1_Latex_MA/img/blue.png'
+p,name = os.path.split(path)
+print name,p
+im = cv2.imread(path)
+im_rz = cv2.resize(im,(1920,1080))
+#cv2.imshow('im',im_rz)
+cv2.imwrite(p+'/blue_ori.png',im_rz)
+#cv2.waitKey()
+
+
+#####################################################################
+#####################################################################
+
+#####################################################################
+#####################################################################
+#####################################################################
+#####################################################################
+#####################################################################
+# We import sklearn.
+from sklearn.manifold import TSNE
+from sklearn.datasets import load_digits
+
+# We'll hack a bit with the t-SNE code in sklearn 0.15.2.
+# Random state.
+RS = 20150101
+
+# We'll use matplotlib for graphics.
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as PathEffects
+
+# We import seaborn to make nice plots.
+import seaborn as sns
+sns.set_style('darkgrid')
+sns.set_palette('muted')
+sns.set_context("notebook", font_scale=1.5,
+                rc={"lines.linewidth": 2.5})
+
+# We'll generate an animation with matplotlib and moviepy.
+
+digits = load_digits()
+print 'digits data:', digits.data.shape #digits data: (1797, 64) #   8*8=64
+print 'digits target:', digits.target
+digits.data.shape
+
+# We import seaborn to make nice plots.
+import seaborn as sns
+sns.set_style('darkgrid')
+sns.set_palette('muted')
+sns.set_context("notebook", font_scale=1.5,
+                rc={"lines.linewidth": 2.5})
+
+#print(digits['DESCR'])
+
+nrows, ncols = 2, 5
+plt.figure(figsize=(6,3))
+plt.gray()
+for i in range(ncols * nrows):
+    ax = plt.subplot(nrows, ncols, i + 1)
+    ax.matshow(digits.images[i,...])
+    plt.xticks([]); plt.yticks([])
+    plt.title(digits.target[i])
+plt.savefig('../digits-generated.png', dpi=150)
+
+
+# We first reorder the data points according to the handwritten numbers.
+print 'target:',digits.target
+print 'target shape:', digits.target.shape
+print 'digits.target==i',digits.target==0 #digits.target==i [ True False False ..., False False False]
+X = np.vstack([digits.data[digits.target==i] for i in range(10)])
+y = np.hstack([digits.target[digits.target==i] for i in range(10)])
+print 'x:',X
+digits_proj = TSNE(random_state=RS).fit_transform(X)
+print 'dig proj', len(digits_proj)
+print digits_proj
+
+def scatter(x, colors):
+    # We choose a color palette with seaborn.
+    palette = np.array(sns.color_palette("hls", 10))
+
+    # We create a scatter plot.
+    f = plt.figure(figsize=(8, 8))
+    ax = plt.subplot(aspect='equal')
+    sc = ax.scatter(x[:,0], x[:,1], lw=0, s=40,
+                    c=palette[colors.astype(np.int)])
+    plt.xlim(-25, 25)
+    plt.ylim(-25, 25)
+    ax.axis('off')
+    ax.axis('tight')
+
+    # We add the labels for each digit.
+    txts = []
+    for i in range(10):
+        # Position of each label.
+        xtext, ytext = np.median(x[colors == i, :], axis=0)
+        txt = ax.text(xtext, ytext, str(i), fontsize=24)
+        txt.set_path_effects([
+            PathEffects.Stroke(linewidth=5, foreground="w"),
+            PathEffects.Normal()])
+        txts.append(txt)
+
+    return f, ax, sc, txts
+
+scatter(digits_proj, y)
+plt.savefig('../digits_tsne-generated.png', dpi=120)
+
+'''
+############################################################
+#  6-face test
+############################################################
+
+
+#example: visualize digit data with TSNE (t-distributed stochastic neighbor embedding) algorithm
+# That's an impressive list of imports.
+import numpy as np
+
+# We import sklearn.
+from sklearn.manifold import TSNE
+from sklearn.datasets import load_digits
+
+# We'll hack a bit with the t-SNE code in sklearn 0.15.2.
+# Random state.
+RS = 20150101
+
+# We'll use matplotlib for graphics.
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as PathEffects
+
+# We import seaborn to make nice plots.
+import seaborn as sns
+sns.set_style('darkgrid')
+sns.set_palette('muted')
+sns.set_context("notebook", font_scale=1.5,
+                rc={"lines.linewidth": 2.5})
+
+# We'll generate an animation with matplotlib and moviepy.
+from sklearn import datasets
+p = '../Data/cad_6faces_cam/'
+ims = [s for s in os.listdir(p)]
+ims_np,labels = [],[]
+LABEL = [0,1,2,3,4,5]
+n_classes = 6
+for im in ims:
+    im_np = cv2.imread(p+im,0)
+    im_np = cv2.resize(im_np,(50,50))
+    cv2.imshow('im',im_np)
+    #cv2.waitKey()
+    ims_np.append(im_np)
+
+ims_np = np.asarray(ims_np).astype('float64')
+LABEL_np = np.asarray(LABEL)
+
+# convert image data to float64 matrix. float64 is need for bh_sne
+#x_data = np.asarray(x_data).astype('float64')
+ims_np = ims_np.reshape((ims_np.shape[0], -1))
+
+# For speed of computation, only run on a subset
+#n = 200
+#ims_np = ims_np[:n]
+
+digits = datasets.load_digits(n_class=n_classes)
+
+def dense_to_one_hot(labels_dense, num_classes=0):
+	"""Convert class labels from scalars to one-hot vectors."""
+	num_labels = labels_dense.shape[0]  # num_labels is the same as num of images
+	index_offset = np.arange(num_labels) * num_classes
+	labels_one_hot = np.zeros((num_labels, num_classes))
+	# each label is written as one vector:eg. class 0 of total 6 classes is [1,0,0,0,0,0]
+	labels_one_hot.flat[index_offset + labels_dense.ravel()] = 1
+	return labels_one_hot
+
+#digits.images = ims_np.reshape((len(ims_np), -1))
+digits.images = ims_np.reshape((len(ims_np),-1))
+
+#digits.images = digits.images[0]
+print 'shape:images:', digits.images.shape
+labels_np = np.asarray(labels)
+digits.target = np.array(LABEL_np).astype(np.int32)
+digits.target = dense_to_one_hot(digits.target, num_classes=n_classes)
+
+
+# We import seaborn to make nice plots.
+import seaborn as sns
+sns.set_style('darkgrid')
+sns.set_palette('muted')
+sns.set_context("notebook", font_scale=1.5,
+                rc={"lines.linewidth": 2.5})
+
+#print(digits['DESCR']) #disclaim
+
+nrows, ncols = 2,3 #2, 5
+plt.figure(figsize=(6,3))
+plt.gray()
+for i in range(ncols * nrows):
+    ax = plt.subplot(nrows, ncols, i + 1)
+    ax.matshow(ims_np[i,...])
+    plt.xticks([]); plt.yticks([])
+    plt.title(LABEL[i])
+plt.savefig('../6faces-generated.png', dpi=150)
+
+# We first reorder the data points according to the handwritten numbers.
+#X = np.vstack([digits.data[digits.target==i] for i in range(n_classes)]) #10
+#
+#y = np.hstack([digits.target[digits.target==i] for i in range(6)])
+#
+digits.target = digits.target[0]
+print 'target:',digits.target == 0
+X = np.vstack([digits.images[digits.target == i] for i in range(6)]) #10
+y = np.hstack([digits.target[digits.target == i] for i in range(6)])
+
+digits_proj = TSNE(random_state=RS).fit_transform(X)
+print 'x:', X
+print 'digits len:', len(digits_proj)
+print digits_proj
+#X: [[  0.   0.   5. ...,   0.   0.   0.]
+#[  0.   0.   2. ...,  12.   0.   0.]]
+#proj
+#[[ 15.52003811  -2.62302831]
+# ...,
+# [ -1.91128425  -2.21679498]]
+
+
+def scatter(x, colors):
+    # We choose a color palette with seaborn.
+    palette = np.array(sns.color_palette("hls", 6)) #10
+
+    # We create a scatter plot.
+    f = plt.figure(figsize=(50, 50))
+    ax = plt.subplot(aspect='equal')
+    sc = ax.scatter(x[:,0], x[:,1], lw=0, s=40,
+                    c=palette[colors.astype(np.int)])
+    plt.xlim(-25, 25)
+    plt.ylim(-25, 25)
+    ax.axis('off')
+    ax.axis('tight')
+
+    # We add the labels for each digit.
+    txts = []
+    for i in range(6): #10
+        # Position of each label.
+        #xtext, ytext = np.median(x[colors == i, :], axis=0)
+        xtext, ytext = np.median(x[colors == i, :], axis=0)
+        txt = ax.text(xtext, ytext, str(i), fontsize=24)
+        txt.set_path_effects([
+            PathEffects.Stroke(linewidth=5, foreground="w"),
+            PathEffects.Normal()])
+        txts.append(txt)
+
+    return f, ax, sc, txts
+
+scatter(digits_proj, y)
+plt.savefig('../6faces_tsne-generated.png', dpi=120)
