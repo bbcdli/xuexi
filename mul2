@@ -1,0 +1,389 @@
+#//***********************************************************************************************//
+#//                                                                                               //
+#//    BSD - License                                                                              //
+#//                                                                                               //
+#//    Copyright(c) 2017                                                                          //
+#//                                                                                               //
+#//                                                                                               //
+#//    Author :                                                                          //
+#//    E-mail: s@yahoo.com                                                               //
+#//                                                                                               //
+#//    All rights reserved.                                                                       //
+#//                                                                                               //
+#//    Redistribution and use in source and binary forms, with or without modification, are       //
+#//    permitted provided that the following conditions are met:                                  //
+#//      1. Redistributions of source code must retain the above copyright notice, this list      //
+#//         of conditions and the following disclaimer.                                           //
+#//      2. Redistributions in binary form must reproduce the above copyright notice, this        //
+#//         list of conditions and the following disclaimer in the documentation and / or         //
+#//         other materials provided with the distribution.                                       //
+#//      3. Neither the name of the copyright holder nor the names of its contributors may be     //
+#//         used to endorse or promote products derived from this software without specific       //
+#//         prior written permission.                                                             //
+#//                                                                                               //
+#//    DISCLAIMER                                                                                 //
+#//    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY        //
+#//    EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF    //
+#//    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.IN NO EVENT SHALL      //
+#//    THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,       //
+#//    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT    //
+#//    OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS                //
+#//    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,          //
+#//    STRICT LIABILITY, OR TORT(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF     //
+#//    THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               //
+#//                                                                                               //
+#//***********************************************************************************************//
+
+import cv2
+# change logs are located in tensor_train.py
+import keras
+import keras.backend as kb
+#from keras.models import Model
+from keras.backend import set_image_dim_ordering
+from keras.models import load_model
+from keras.callbacks import ModelCheckpoint, LearningRateScheduler
+from itertools import * #for izip
+import seg_arch as arch
+#from background_learning_s import dice_coef_loss
+#tf.python.control_flow_ops = tf #hy:for remote
+
+#KERAS_BACKEND=tensorflow python -c "from keras import backend"
+#Using TensorFlow backend.
+
+from PIL import ImageFilter
+from random import randint
+import time
+import datetime
+import os
+
+import numpy as np
+import PIL
+
+from PIL import Image #hy: create video with images
+#import settings #hy: collection of global variables
+import tools_MA as tools
+import tensorflow as tf
+#https://handong1587.github.io/deep_learning/2015/10/09/segmentation.html
+#https://keras.io/getting-started/functional-api-guide/
+from keras.preprocessing.image import ImageDataGenerator
+import sys
+FLAGS = tf.flags.FLAGS
+
+MAX_ITERATION = 13#int(1e6 + 1)
+NUM_OF_CLASSESS = 255 #255#151
+IMAGE_SIZE = 320
+PROJ_DIR = '/home/Documents/'
+do_reduce_mean = True
+
+tf.flags.DEFINE_integer("batch_size", "1", "batch size for training")
+tf.flags.DEFINE_string("data_dir", PROJ_DIR + "/Data/data_3_segnet/mul_class/", "path to dataset")
+tf.flags.DEFINE_string("val_dir",  PROJ_DIR + "/Test_Images/MA_video/representations/", "path to val dataset")
+tf.flags.DEFINE_bool('log_on', "False", "Log mode: True/ False")
+tf.flags.DEFINE_string('log_dir', '../logs/logfiles_tf/', "path to log file")
+
+tf.flags.DEFINE_string('mode', "con_train", "Mode info new_train/con_train/ visualize")
+tf.flags.DEFINE_integer('current_step', "180", "current step for training")
+#tf.flags.DEFINE_float("learning_rate", "0.00019", "Learning rate for Optimizer")
+
+do_multiple_train = False
+if do_multiple_train:
+	# use setup in eva.sh
+  bg_LABEL = sys.argv[1]  # + ".meta"
+  model_path = sys.argv[2]
+  learning_rate = float(sys.argv[3])
+  model_path_name = sys.argv[4]
+  print 'learning rate:', learning_rate
+
+else:
+  bg_LABEL = '6c_160_18799_32-0.13' #714p33_107
+  model_path = "../testbench/seg_mul/ma_24models/"
+  
+
+if FLAGS.mode == 'con_train' and not do_multiple_train:
+  #manual
+  #model_name = model_path + 'only_pub_ma_curve_lr0002_01-0.32_d0.5958.hdf5'
+  model_path_name = model_path + '6c_160_18799_32-0.13' + '.hdf5' #
+  print 'follow model:', model_path_name
+  # model_name = model_path + 'w_table_patches_136top.hdf5'
+  set_image_dim_ordering(dim_ordering='th')
+
+#################################################################
+# Set seg model
+#################################################################
+
+smooth = 1.
+def add_colorOverlay(img_grayscale, mask):
+  colorOverlay = cv2.cvtColor(img_grayscale, cv2.COLOR_GRAY2RGB)
+  colorOverlay[:, :, 2] = mask
+  return colorOverlay
+
+def load_and_preprocess_data_k(h, w):
+  data_path = PROJ_DIR + '/Data/MA_cad/training/'   # main_path
+
+  print 'train_path:', data_path
+  
+  #####################################################################################
+  im_path = data_path + 'others/2images_6cl/'  # for both masks_mul and masks_mul_1extra
+  #m_path = data_path + 'others/2masks_6cl/' #2masks_6cl_ex_ring
+  m_path = data_path + 'others/2masks_6cl_ex_ring/' #2masks_6cl_ex_ring
+  #im_path = data_path + 'others/3images_gimp/'  # for both masks_mul and masks_mul_1extra
+  #m_path = data_path + 'others/3masks_gimp_ex_ring/' #3masks_gimp_ex_ring
+  #im_path = data_path + 'others/2images_profile/'
+  #m_path = data_path + 'others/2masks_profile/'
+  #im_path = data_path + '4images_exp2/'  # for both masks_mul and masks_mul_1extra
+  #m_path = data_path + '4masks_exp2_ex_ring/' #2masks_ex_ring
+
+  data_1s = sorted([s for s in os.listdir(im_path) ])  # if 'out' in s])
+  m_1s = sorted([s for s in os.listdir(m_path)])  # if 'out' in s])
+  data_1s = data_1s[0:70]
+  #data_1s = data_1s[0:82] #+ data_1s[126:129]
+  #data_1s = data_1s[0:27+69] + data_1s[113+27:116+27]#33
+  #data_1s = data_1s[0:44] + data_1s[113:116] + data_1s[126:136] #33
+  m_1s = m_1s[0:70] #85
+
+  images, masks = tools.import_data_k_segnet(im_path, m_path, data_1s, m_1s, h, w, len(data_1s),MUL=False,
+                                                do_Flipping=True,do_gblur=True,do_darken=True)
+  #im_path,label_path, file_imgs, file_masks, h, w, maxNum, MUL=False,
+						  #do_Flipping=False,do_gblur=False
+  if do_reduce_mean:
+    images = tools.reduce_mean_stdev(images)
+  #####################################################################################
+  add_data_2 = True
+  if add_data_2:
+    #im_path2 = data_path + '4images_exp2best185/'  #
+    im_path2 = data_path + 'others/3images_gimp/'  #
+    #m_path2 = data_path + 'others/3masks_gimp/'  #
+    m_path2 = data_path + 'others/3masks_gimp_ex_ring/'  #
+    data_2s = sorted([s for s in os.listdir(im_path2)])
+    m_2s = sorted([s for s in os.listdir(m_path2)])
+    #data_2s = data_2s[0:34] + data_2s[185:202]
+    #m_2s = m_2s[0:30]
+
+    images2, mask2 = tools.import_data_k_segnet(im_path2, m_path2, data_2s, m_2s, h, w, len(data_2s),MUL=False,
+                                                do_Flipping=True,do_gblur=True,do_darken=True)
+    print 'train_path:', im_path2, ', images2 shape:', images2.shape, ', mask2 shape:', mask2.shape
+    if do_reduce_mean:
+      images2 = tools.reduce_mean_stdev(images2)
+    images = np.concatenate((images, images2), axis=0)
+    masks = np.concatenate((masks, mask2), axis=0)
+  
+  #####################################################################################
+  add_data_3 = False
+  if add_data_3:
+    im_path3 = data_path + '6images_g_y/' # main_path
+    m_path3 = data_path + '6masks_g_y/' # main_path
+    data_3s = sorted([s for s in os.listdir(im_path3)])
+    m_3s = sorted([s for s in os.listdir(m_path3)])
+    data_3s = data_3s[0:3]
+    m_3s = m_3s[0:3]
+
+    images3, mask3 = tools.import_data_k_segnet(im_path3, m_path3, data_3s, m_3s, h, w, len(data_3s),MUL=False,
+                                                do_Flipping=True,do_gblur=True,do_darken=True)
+
+
+    print 'train_path:', im_path3, ', images3 shape:', images3.shape, ', mask3 shape:', mask3.shape
+
+    if do_reduce_mean:
+      images3 = tools.reduce_mean_stdev(images3)
+    images = np.concatenate((images, images3), axis=0)
+    masks = np.concatenate((masks, mask3), axis=0)
+  ####################################################################################
+  add_data_4 = False
+  if add_data_4:
+    im_path4 = data_path + '/images_blank2/'  # main_path
+    m_path4 = data_path + '/masks_blank2/'  # main_path
+    data_4s = sorted([s for s in os.listdir(im_path4)])
+    m_4s = sorted([s for s in os.listdir(m_path4)])
+
+    #data_4s = data_4s[10:30]
+    #m_4s = m_4s[10:30]
+
+    images4, mask4 = tools.import_data_k_segnet(im_path4, m_path4, data_4s, m_4s, h, w,
+                                                         len(data_4s), MUL=False,
+                                                do_Flipping=True,do_gblur=True,do_darken=True)
+    print 'train_path:', im_path4, ', images4 shape:', images4.shape, ', mask4 shape:', mask4.shape
+    if do_reduce_mean:
+      images4 = tools.reduce_mean_stdev(images4)
+    images = np.concatenate((images, images4), axis=0)
+    masks = np.concatenate((masks, mask4), axis=0)
+
+  add_data_5 = False
+  if add_data_5:
+    im_path5 = data_path + '/3images_mul/'  # main_path
+    m_path5 = data_path + '/3masks_mul/'  # main_path
+    data_5s = sorted([s for s in os.listdir(im_path5)])
+    m_5s = sorted([s for s in os.listdir(m_path5)])
+
+    #data_5s = data_5s[150:280]
+    #m_5s = m_5s[150:280]
+
+    images5, mask5 = tools.import_data_k_segnet(im_path5, m_path5, data_5s, m_5s, h, w,
+                                                            len(data_5s), MUL=False,
+                                                do_Flipping=True,do_gblur=True,do_darken=True)
+    print 'train_path:', im_path5, ', images5 shape:', images5.shape, ', mask5 shape:', mask5.shape
+    if do_reduce_mean:
+      images5 = tools.reduce_mean_stdev(images5)
+    images = np.concatenate((images, images5), axis=0)
+    masks = np.concatenate((masks, mask5), axis=0)
+  ####################################################################################
+  
+  print 'images shape after mean reduction:', images.shape  # images shape: (849, 33856, 1) example 6c
+  return images, masks
+
+def dice_coef(y_true, y_pred):
+  y_true_f = kb.flatten(y_true)
+  y_pred_f = kb.flatten(y_pred)
+  intersection = kb.sum(y_true_f * y_pred_f)
+  return (2. * intersection + smooth) / (kb.sum(y_true_f) + kb.sum(y_pred_f) + smooth)
+
+def dice_coef_loss(y_true, y_pred):
+  return 1-dice_coef(y_true, y_pred)
+
+def load_and_preprocess_data_onlinetest_k(h,w):
+  total_files_im, total_files_m = [], []
+  all_read_path_im, all_read_path_m = [], []
+  folders = ['vorn/', 'hinten/', 'links/', 'rechts/', 'unten/', 'oben/']  # Paper order
+  for folder in folders:
+    read_path_im = PROJ_DIR + '/Test_Images/MA/test_represent/role1_6cl/im/' + folder
+    read_path_m = PROJ_DIR + '/Test_Images/MA/test_represent/role1_6cl/m/' + folder
+    files_im = sorted([s for s in os.listdir(read_path_im) if 'cad' not in s])  # if 'out' in s])
+    files_m = sorted([s for s in os.listdir(read_path_m) if 'cad' not in s])  # if 'out' in s])
+    #data_ts = data_ts[0:2]
+    #m_ts = m_ts[0:2]
+    total_files_im = total_files_im + files_im
+    total_files_m = total_files_m + files_m
+
+    #for i in xrange(len(files_im)):
+    #  all_read_path_im.append(read_path_im)
+    #  all_read_path_m.append(read_path_m)
+    
+  images_t, masks_t = tools.import_data_k_segnet(read_path_im, read_path_m, total_files_im, total_files_m, h, w, len(total_files_im), MUL=False,
+                                                 do_Flipping=False, do_gblur=False, do_darken=False)
+  if do_reduce_mean:
+    images_t = tools.reduce_mean_stdev(images_t)
+  return images_t,masks_t
+
+def train_2c(h, w,learning_rate,model_path_name,model_path):  # input 320x320
+  
+  print 'train binary classes, load data,learning rate:', learning_rate
+  #bg_LABEL = '6cl_44_exp2_33_blank3_pat10_val' #714p33_107
+
+  images, masks = load_and_preprocess_data_k(h,w)
+  
+  use_test_data = True
+  if use_test_data:
+    images_t, masks_t = load_and_preprocess_data_onlinetest_k(h,w)
+    
+  print 'images shape', images.shape
+  '''
+  #debug
+  for i in xrange(len(images)):# 0,10
+    mask   = mask.reshape(h, w)
+    images = images.reshape((h, w))
+    #cv2.imwrite("input_%03d.jpg" % i, np.uint8(mask) * 255)
+    #cv2.imwrite("pic_%03d.jpg" % i, np.uint8(images) * 255)
+    cv2.imshow('mask',np.uint8(mask)*255)
+    cv2.waitKey()
+  '''
+
+  # images = images.transpose((None, 1, h, w))
+  print 'set checkpoint'
+
+  #model_path = "../testbench/seg_mul/"
+  #keras_file_path = model_path+'w'+bg_LABEL+'{epoch:02d}-{val_loss:.2f}.hdf5'
+  #keras_file_path = model_path+'w_rng_'+bg_LABEL+'{epoch:02d}_{val_loss:.2f}.hdf5'
+  #save_params = keras.callbacks.ModelCheckpoint(filepath=model_path + bg_LABEL + '{epoch:02d}.hdf5',
+  #                                              monitor='val_loss', verbose=2,
+  #                                              save_best_only=False, save_weights_only=False, mode='auto')
+  
+  save_params = ModelCheckpoint(filepath=model_path + bg_LABEL + '_{epoch:02d}-{val_loss:.2f}.hdf5',
+                                                monitor='val_loss', verbose=2,
+                                                save_best_only=False, save_weights_only=False, mode='auto')
+  #save_params = ModelCheckpoint('weights.h5', monitor='val_loss', save_best_only=True)
+
+  keras.callbacks.History()
+  epochs = MAX_ITERATION  # 1200
+  learning_rate = learning_rate #0.0002
+  decay_rate = learning_rate / epochs
+  momentum = 0.99
+  sgd = arch.SGD(lr=learning_rate, momentum=momentum)  # hy:decay_rate
+  set_image_dim_ordering(dim_ordering='th')
+  
+  print 'load network'
+  if FLAGS.mode == 'new_train':
+    model = arch.segnet_arch_2c(h, w)  #segnet_arch_2c_rgb
+
+  if FLAGS.mode == 'con_train':
+    # model_name = model_path + 'w_table_patches_136top.hdf5'
+    model = load_model(model_path_name)
+  
+  print 'compile'
+  #compile option 1, best suitable for the 2 to 6 classes data, reduce loss quickly
+  model.compile(loss='binary_crossentropy', optimizer=sgd)
+  #compile option 2
+  #model.compile(loss='categorical_crossentropy', optimizer=sgd) #loss=dice_coef_loss, metrics=[dice_coef]
+  #compile option 3
+  #model.compile(optimizer=sgd,loss=dice_coef_loss, metrics=[dice_coef]) #loss=dice_coef_loss, metrics=[dice_coef]
+  
+  #https://github.com/fchollet/keras/issues/1753 use test data as val , "Using test data for this validation is SAFE"
+  use_split_data = True
+  if use_test_data:
+    model.fit(images, masks, batch_size=1, nb_epoch=epochs, verbose=1, shuffle=True,
+              validation_data=(images_t, masks_t), callbacks=[save_params])
+  
+  elif use_split_data:
+    model.fit(images, masks, batch_size=1, nb_epoch=epochs, verbose=1, shuffle=True,
+            validation_split=0.2,callbacks=[save_params])
+  
+  else:
+    data_gen_args = dict(featurewise_center=True,
+                         featurewise_std_normalization=True,
+                         rotation_range=90.,
+                         width_shift_range=0.1,
+                         height_shift_range=0.1,
+                         zoom_range=0.2)
+    im_folder = PROJ_DIR + 'Data/MA_cad/training/others/2images_6cl_folder/'
+    m_folder = PROJ_DIR + 'Data/MA_cad/training/others/2masks_6cl_7ex_ring_folder/'
+    image_datagen = ImageDataGenerator(**data_gen_args)
+    mask_datagen = ImageDataGenerator(**data_gen_args)
+  
+    # Provide the same seed and keyword arguments to the fit and flow methods
+    seed = 1
+    image_datagen.fit(images, augment=True, seed=seed)
+    mask_datagen.fit(masks, augment=True, seed=seed)
+  
+    image_generator = image_datagen.flow_from_directory(
+      im_folder,
+      class_mode=None,
+      seed=seed)
+  
+    mask_generator = mask_datagen.flow_from_directory(
+      m_folder,
+      class_mode=None,
+      seed=seed)
+  
+    # combine generators into one which yields image and masks
+    train_generator = izip(image_generator, mask_generator)
+  
+    model.fit_generator(
+      train_generator,
+      steps_per_epoch=200,
+      epochs=epochs,
+      verbose=1)
+
+  #visulization
+  #verbose=1 to switch on printing batch result
+  #model = DNN(network, tensorboard_verbose=3)
+  
+  print 'save'
+  model.save(model_path + 'model_' + bg_LABEL + '.h5')
+
+#use tensorflow
+#http://warmspringwinds.github.io/tensorflow/tf-slim/2016/11/22/upsampling-and-image-segmentation-with-tensorflow-and-tf-slim/
+
+
+if 'train' in FLAGS.mode:
+  train_2c(320,320,learning_rate,model_path_name,model_path)
+
+    
+  print("Training done!")
