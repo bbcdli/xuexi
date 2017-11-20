@@ -1,3 +1,661 @@
+# python -m tensorflow.tensorboard --logdir=./
+import tensorflow as tf
+import sys
+from keras.backend import set_image_dim_ordering
+# tf.python.control_flow_ops = tf #hy:for remote
+
+# KERAS_BACKEND=tensorflow python -c "from keras import backend"
+# Using TensorFlow backend.
+from PIL import ImageFilter
+from functools import wraps
+from random import randint
+import time
+import os
+import cv2
+import numpy as np
+import PIL
+
+import tflearn as tflearn
+from sklearn import datasets
+from scipy import ndimage
+import math
+import operator
+import imutils
+from PIL import Image  # hy: create video with images
+import tools_classifier_seg as tools
+
+# https://handong1587.github.io/deep_learning/2015/10/09/segmentation.html
+
+# https://keras.io/getting-started/functional-api-guide/
+
+MAX_ITERATION = 20000  # int(1e5 + 1)
+NUM_OF_CLASSESS = 255  # 255#151
+IMAGE_SIZE = 320
+PROJ_DIR = '/home/'
+Mul_Class = True
+INPUT_CH = 3
+do_reduce_mean = True
+
+FLAGS = tf.flags.FLAGS
+tf.flags.DEFINE_bool('DEBUG', 'False', 'Debug mode: True/ False')
+tf.flags.DEFINE_integer("batch_size", "1", "batch size for training")
+tf.flags.DEFINE_integer("view_size", "4", "batch size for view")
+tf.flags.DEFINE_string("logs_dir", PROJ_DIR + "logs/", "path to logs directory")
+tf.flags.DEFINE_string("data_dir", PROJ_DIR + "Data/data_3_segnet/mul_class/", "path to dataset")
+tf.flags.DEFINE_string("val_dir", PROJ_DIR + "Test_Images/MA_video/representations/", "path to val dataset")
+tf.flags.DEFINE_string("tb_dir", PROJ_DIR + 'Tensorboard_data/sum107/' + '08-08' + '/', "path to val dataset")
+# tf.flags.DEFINE_float("learning_rate", "1e-4", "Learning rate for Adam Optimizer")
+tf.flags.DEFINE_bool('log_on', "False", "Log mode: True/ False")
+
+tf.flags.DEFINE_string('mode', "new_train", "Mode new_train/con_train/ visualize / only_validate_data")
+tf.flags.DEFINE_integer('current_step', "1751", "current step for training")  # in fact 17050
+
+
+#################################################################
+# use tensorflow
+# http://warmspringwinds.github.io/tensorflow/tf-slim/2016/11/22/upsampling-and-image-segmentation-with-tensorflow-and-tf-slim/
+
+def load_and_preprocess_data(h, w):
+    data_path = PROJ_DIR + '/Data/MA_cad/training/'  # main_path
+    # data_path = '../Data/data_3_segnet/mul_class/MA_real/validation/'  # main_path
+
+    print 'train_path:', data_path
+
+    #####################################################################################
+    im_path = data_path + 'others/2images_6cl/'  # for both masks_mul and masks_mul_1extra
+    m_path = data_path + 'others/2masks_ex_ring/'
+
+    # im_path = data_path + '6images/'  # total 714 + 155(green,yellow)
+    # m_path = data_path + '6masks/'
+    data_1s = sorted([s for s in os.listdir(im_path)])
+    m_1s = sorted([s for s in os.listdir(m_path)])
+
+    # data_1s = data_1s[0:100] + data_1s[600:700]
+    # m_1s = m_1s[0:100] +  m_1s[600:700]
+    #data_1s = data_1s[0:33] + data_1s[98:109]
+    data_1s = data_1s[0:33]
+
+
+    # data_1s = data_1s[10:28]
+    # m_1s = m_1s[10:28]
+    images, masks = tools.import_data_seg_tf_rgb_rnd(im_path, m_path, data_1s, m_1s, h, w, len(data_1s), MUL=True,
+                                                     do_Flipping=True, do_gblur=True, do_darken=True)
+    # images, masks = tools.import_data_seg_mul_tf_rgb(im_path, m_path, data_1s, m_1s, h, w, len(data_1s),
+    #												 do_Flipping=True, do_gblur=True)
+    if do_reduce_mean:
+        images = tools.reduce_mean_stdev(images)
+    # print masks[0]
+    if FLAGS.DEBUG:
+        import scipy.misc as misc
+        for i, im, m in zip(xrange(len(images)), images, masks):
+            print im.shape, m.shape
+            misc.imsave(data_path + '1masks_3cl_o_val/' + str(i) + '.jpg', im)
+            misc.imsave(data_path + '1masks_3cl_o_val/' + str(i) + '.png', m.reshape(h, w))
+        # misc.imshow(m.reshape(h,w))
+
+    #####################################################################################
+    add_data_2 = False
+    if add_data_2:
+        im_path2 = data_path + '/6images_g_y/'  #
+        m_path2 = data_path + '/6masks_g_y/'  #
+        data_2s = sorted([s for s in os.listdir(im_path2)])
+        m_2s = sorted([s for s in os.listdir(m_path2)])
+
+        # data_2s = data_2s[100:280]
+        # m_2s = m_2s[100:280]
+
+        images2, mask2 = tools.import_data_seg_tf_rgb_rnd(im_path2, m_path2, data_2s, m_2s, h, w, len(data_2s),
+                                                          MUL=False,
+                                                          do_Flipping=True, do_gblur=True, do_darken=True)
+        print 'train_path:', im_path2, ', images2 shape:', images2.shape, ', mask2 shape:', mask2.shape
+
+        if do_reduce_mean:
+            images2 = tools.reduce_mean_stdev(images2)
+
+        images = np.concatenate((images, images2), axis=0)
+        masks = np.concatenate((masks, mask2), axis=0)
+
+    #####################################################################################
+    add_data_3 = False
+    if add_data_3:
+        im_path3 = data_path + '/4images_exp/'  # main_path
+        m_path3 = data_path + '/4masks_exp/'  # main_path
+        data_3s = sorted([s for s in os.listdir(im_path3)])
+        m_3s = sorted([s for s in os.listdir(m_path3)])
+
+        # data_3s = data_3s[10:15]
+        # m_3s = m_3s[10:15]
+
+        images3, mask3 = tools.import_data_seg_tf_rgb_rnd(im_path3, m_path3, data_3s, m_3s, h, w,
+                                                          len(data_3s), MUL=False,
+                                                          do_Flipping=True, do_gblur=True, do_darken=True)
+        print 'train_path:', im_path3, ', images3 shape:', images3.shape, ', mask3 shape:', mask3.shape
+
+        if do_reduce_mean:
+            images3 = tools.reduce_mean_stdev(images3)
+        images = np.concatenate((images, images3), axis=0)
+        masks = np.concatenate((masks, mask3), axis=0)
+
+    add_data_4 = False
+    if add_data_4:
+        im_path4 = data_path + '/images_blank2/'  # main_path
+        m_path4 = data_path + '/masks_blank2/'  # main_path
+        data_4s = sorted([s for s in os.listdir(im_path4)])
+        m_4s = sorted([s for s in os.listdir(m_path4)])
+
+        # data_4s = data_4s[7:9] + data_4s[15:17] + data_4s[21:22] + data_4s[23:24]
+        # m_4s =    m_4s[7:9]      + m_4s[15:17]     + m_4s[21:22] + m_4s[23:24]
+        # data_4s = data_4s[22:47]
+        # m_4s = m_4s[22:47]
+
+        images4, mask4 = tools.import_data_seg_tf_rgb_rnd(im_path4, m_path4, data_4s, m_4s, h, w,
+                                                          len(data_4s), MUL=False,
+                                                          do_Flipping=True, do_gblur=True, do_darken=True)
+        print 'train_path:', im_path4, ', images4 shape:', images4.shape, ', mask4 shape:', mask4.shape
+
+        if do_reduce_mean:
+            images4 = tools.reduce_mean_stdev(images4)
+        images = np.concatenate((images, images4), axis=0)
+        masks = np.concatenate((masks, mask4), axis=0)
+
+    add_data_5 = False
+    if add_data_5:
+        im_path5 = data_path + '/4images_exp/'  # main_path  #4images_exp
+        m_path5 = data_path + '/4masks_exp/'  # main_path
+        data_5s = sorted([s for s in os.listdir(im_path5)])
+        m_5s = sorted([s for s in os.listdir(m_path5)])
+
+        # data_5s = data_5s[150:280]
+        # m_5s = m_5s[150:280]
+
+        images5, mask5 = tools.import_data_seg_2c_tf_rgb(im_path5, m_path5, data_5s, m_5s, h, w,
+                                                         len(data_5s), do_Flipping=True, do_gblur=True)
+        print 'train_path:', im_path5, ', images5 shape:', images5.shape, ', mask5 shape:', mask5.shape
+
+        images5 = tools.reduce_mean_stdev(images5)
+        images = np.concatenate((images, images5), axis=0)
+        masks = np.concatenate((masks, mask5), axis=0)
+
+    ####################################################################################
+    ####################################################################################
+    return images, masks
+
+
+def get_online_test_batch(h, w):
+    data_path = '../Test_Images/MA/test_represent/'  # main_path
+
+    print 'train_path:', data_path
+    #####################################################################################
+    im_path = data_path + 'images/'
+    m_path = data_path + 'masks/'
+    data_1s = sorted([s for s in os.listdir(im_path)])
+    m_1s = sorted([s for s in os.listdir(m_path)])
+
+    max_num = len(data_1s)  # 3
+    images, masks, images_view = tools.import_data_segnet_2c_tf_misc_cv2_gray(im_path, m_path, data_1s, m_1s, h, w,
+                                                                              max_num, MUL=False,
+                                                                              do_Flipping=False)
+    #####################################################################################
+
+    dummy_mask = np.ones((1, h * w))
+    return images, masks, dummy_mask, data_1s, m_1s, images_view
+
+
+def count_diff_pixel_values(picture, h, w):
+    ds = []
+    for row in xrange(h):
+        for col in xrange(w):
+            if picture[row][col] not in ds:
+                ds.append(picture[row][col])
+    return len(ds), ds
+
+
+def save_str_to_file(file, lines):
+    lines = '\n'.join(lines)
+    with open(file, 'w') as f:
+        f.writelines(lines)
+
+
+def test_seg_tf_model_online(dice_results, dice_cad_results, save_name, classifier_model, h, w, dropout_1s, step):
+    images, masks, dummy_mask, data_1s, label_1s, images_view = get_online_test_batch(h, w)
+    if do_reduce_mean:
+        images = tools.reduce_mean_stdev(images)
+    # print 'images shape after mean reduction:', images.shape  # images shape: (849, 33856, 1) example 6c
+    # images, masks, data_1s = images[0:5], masks[0:5], data_1s[0:5]
+    print 'len of images, masks loaded:', len(images), ', ', len(masks)
+    new_graph = tf.Graph()
+
+    with tf.Session(graph=new_graph) as sess2:
+        # load classifier model
+        # sess, saver = tools.load_classifier_model(sess, '../testbench/6classes/', classifier_model=classifier_model)
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir=FLAGS.logs_dir)
+        tf.train.import_meta_graph(classifier_model)  # (v)
+
+        ckpt.model_checkpoint_path = classifier_model[:-5]
+
+        if ckpt and ckpt.model_checkpoint_path:
+            saver = tf.train.Saver()
+            saver.restore(sess2, ckpt.model_checkpoint_path)
+            print "Evaluation with model", ckpt.model_checkpoint_path
+        else:
+            print 'not found model'
+
+        batch_ys = dummy_mask
+        batch_ys = batch_ys.reshape(-1, h, w, 1)
+        dices = 0
+        for im, im_o, ref_mask, imn, mn, idx in zip(images, images_view, masks, data_1s, label_1s, xrange(len(images))):
+            imn, mn = imn[:-4], mn[:-4]
+            test_im = np.uint8(im_o.reshape((h, w, 3)))
+            batch_xs = im.reshape(-1, h, w, INPUT_CH)  # cat
+
+            DEBUG = False
+            if DEBUG:
+                print 'batch_x, batch_y shape:', batch_xs.shape, ', ', batch_ys.shape
+                print 'batch_xs (test_im):'
+                cv2.imshow('im', test_im)
+
+            feed_dict_view = {"x:0": batch_xs, "y:0": batch_ys, "keep_prob:0": dropout_1s}
+            # conv19_view = sess2.run("conv19:0", feed_dict=feed_dict_view)
+            pred = sess2.run("prediction:0", feed_dict=feed_dict_view)
+            pred = np.squeeze(pred, axis=3)
+            pred = pred[0].astype(np.uint8) * 255.0
+            pred_thresh = pred.copy()
+
+            conv19_view = sess2.run("conv19:0", feed_dict=feed_dict_view)
+
+            conv19_view = conv19_view[0].astype(np.uint8) * 255.0
+            conv19_r, conv19_c, conv19_ch = conv19_view.shape
+            # print '====== conv19 shape:', conv19_view.shape
+
+            conv19_values0 = conv19_view[:, :, 0]
+            conv19_values1 = conv19_view[:, :, 1]
+            if conv19_ch == 2:
+                conv19_values2 = conv19_view[:, :, 1]
+            elif conv19_ch == 3:
+                conv19_values2 = conv19_view[:, :, 2]
+
+            # print 'pred *255', pred #tasks direct value without *255: [0,2], so what we see with *255: 0,255,510
+            # print 'conv19 *255', conv19_view  #tasks value 0,1, => 0, 255
+
+            ref_mask = np.squeeze(ref_mask, axis=2)
+            ref_mask_thresh = ref_mask * 255.0
+
+            print '\n'
+
+            def print_count(img, h, w, str):
+                n, diff_v = count_diff_pixel_values(img, h, w)
+                min_n = min(n, 5)
+                print 'num of diff values in ', str, ':', n, ',    ', diff_v[:min_n]
+
+            print_count(pred, h, w, 'pred')
+            # print_count(ref_mask_thresh,h,w,'r255')
+            print_count(conv19_values0, h, w, 'con0')
+            print_count(conv19_values1, h, w, 'con1')
+            print_count(conv19_values2, h, w, 'con2')
+
+            ##############################################################
+            # calc dice
+            ##############################################################
+            threshold_ref = True
+            if threshold_ref:
+                """
+				all values larger than thresh_at value will be replaced with a new value
+				this is only for the case when only one annotation in foreground and the background are interested
+				"""
+                thresh_at = 1  # or 1
+                ceiling_to_pixel_value = 255
+                idx = ref_mask_thresh[:, :] > thresh_at
+                ref_mask_thresh[idx] = ceiling_to_pixel_value
+
+            threshold_pred = True
+            if threshold_pred:
+                thresh_at = 0
+                pred_key_value = 255
+                idx = pred_thresh[:, :] > thresh_at
+                pred_thresh[idx] = pred_key_value
+
+            if 'cad' not in imn:
+                dice = tools.calc_dice_simi(pred_thresh, ref_mask_thresh, imn, k=pred_key_value)
+                dice_str = imn + ', \t\tdice\t:' + str(dice)
+                dice_results.append(dice_str)
+                dices += dice
+                # dice_2 = tools.calc_dice_simi(pred_thresh, ref_mask_thresh, imn, k=2)
+                print imn, ',dice_1', dice
+            # print imn,'dice_2:', dice_2
+            # dice_results.append(str(avg_dice))
+
+
+            if 'cad' in imn:
+                dice_cad = tools.calc_dice_simi(pred_thresh, ref_mask_thresh, imn, k=pred_key_value)
+                dice_cad_str = imn + ', \t\tdice\t:' + str(dice_cad)
+                dice_cad_results.append(dice_cad_str)
+                print imn, ', dice score: {}'.format(dice_cad)
+
+
+
+            ##############################################################
+            # save images
+            ##############################################################
+            display = False
+            save_im = True
+            if display:
+                cv2.imshow('test_pred', pred)
+                cv2.imshow('ref', ref_mask)
+                cv2.waitKey(5)
+            if save_im:
+                # cv2.imwrite(save_name + 'pred_' + imn +'.png', pred)
+                # cv2.imwrite(save_name + 'ori_' + imn +'.png', test_im)
+
+                # stack view
+                #
+                def save_stacked_ims(im1, im2, im3):
+                    test_im, pred, conv19_view = im1, im2, im3
+                    r_rgb, c_rgb, ch = test_im.shape
+                    r_gray, c_gray = pred.shape
+                    r_rgb2, c_rgb2, conv19_ch = conv19_view.shape
+
+                    r_comb = max(r_rgb, r_gray, r_rgb2)
+                    c_comb = c_rgb + c_gray + c_rgb2
+                    comb_im = np.zeros(shape=(r_comb, c_comb, ch), dtype=np.uint8)
+
+                    comb_im[:r_rgb, :c_rgb] = test_im
+                    comb_im[:r_gray, c_rgb:c_rgb + c_gray] = pred[:, :, None]
+                    if conv19_ch < 3:
+                        comb_im[:r_rgb2, c_rgb + c_gray:] = np.expand_dims(conv19_view[:, :, 1], 3)
+                    else:
+                        comb_im[:r_rgb2, c_rgb + c_gray:] = conv19_view
+                    cv2.imwrite(save_name + 'com_' + imn + '.png', comb_im)
+
+                save_stacked_ims(test_im, pred, conv19_view)
+
+            # print 'mask path name',save_name + mn + '_ref.png'
+            # cv2.imwrite(save_name + 'ref_' + mn + '.png', ref_mask*255)
+
+        avg_dice = float(dices / (len(images) - 6))  # 6 cad
+        avg_str = '\t\t\t\t================> step ' + str(step) + ' avg:' + str(avg_dice) + '\n'
+        dice_results.append(avg_str)
+    return avg_dice, dice_results, dice_cad_results
+
+
+def train_2c_tensorflow(h, w):  # input 320x320
+    # tf" assumes (rows, cols, channels), "th" assumes (channels, rows, cols)
+    dice_results, dice_cad_results = [], []
+    set_image_dim_ordering(dim_ordering='tf')
+    # print 'train binary classes, load data'
+    print 'load data'
+    bg_LABEL = 'sigmch3conv19_2'
+    images, masks = load_and_preprocess_data(h, w)
+
+    Graph_seg = 1
+
+    if Graph_seg == 1:
+        # import Graph_seg_convout3 as g_seg
+        import Graph_seg_tf1 as g_seg
+
+        print 'import graph seg'
+        # arch_str = 'seg'
+
+
+        learning_rate, dropout_def, dropout_1s, optimizer_type, classifier_tpye, loss_type, \
+        x, y, y_int, keep_prob, optimizer, cost, summary_op, optimize_op, \
+        conv19_out, conv19, annotation_pred = g_seg.define_model()
+
+    str_log = optimizer_type
+
+    if FLAGS.log_on and ('train' in FLAGS.mode):
+        sys.stdout = tools.Logger(FLAGS.log_path, str_log)
+
+    print 'Network parameters etc:\n' \
+          'learning_rate:', str(learning_rate), ', dropout_def:', dropout_def,
+    ', optimizer_type', optimizer_type, ', classifier_tpye', classifier_tpye, \
+    ', loss_type', loss_type  # , ' conv19_out:', conv19_out
+
+    # hy:customized tensor model name
+    model_log_name = 'model_' + bg_LABEL
+
+    ## hy include specs of model
+    from datetime import datetime
+    t = datetime.now()
+    date = t.strftime('%m-%d')  # t.strftime('%y-%m-%d')
+    # tensorboard_path = '../Tensorboard_data/sum107/' + '06-16' + '/'
+    tensorboard_path = FLAGS.tb_dir
+
+    tensor_model_sum_path = '../tensor_model_sum/'
+
+    # Keep training until max iterations is reached or by any other defined conditions
+    set_STOP = False
+    TrainingProp = 1
+    train_size = int(len(images) * TrainingProp)
+    print 'train_size', train_size
+
+    # Launch the graph
+    with tf.Session() as sess:
+        saver = tf.train.Saver()  # hy:
+
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir=FLAGS.logs_dir)
+        if FLAGS.mode == 'new_train':
+            # Initializing the variables
+            init = tf.global_variables_initializer()
+            sess.run(init)
+            current_step = 0
+        if FLAGS.mode == 'con_train' or FLAGS.mode == 'visualize':
+            current_step = FLAGS.current_step
+            # or manually
+            #ckpt.model_checkpoint_path = PROJ_DIR + '/logs/' + 'model_sigmch3conv19_3_0_I_loss0.36-1000.meta'
+            # ckpt.model_checkpoint_path = '../logs/'+'model_seg_adam_h184_w184_b3_II_los-2.23-407'
+
+            # print 'ckpt path', ckpt.model_checkpoint_path
+
+            if ckpt and ckpt.model_checkpoint_path:
+                saver.restore(sess, ckpt.model_checkpoint_path)
+                print "Continue to train with ", ckpt.model_checkpoint_path
+                classifier_model = ckpt.model_checkpoint_path + '.meta'
+            else:
+                print 'not found model'
+
+        if 'train' in FLAGS.mode:
+            ###############################################################
+            # hy: can display all results in one graph
+            train_writer = tf.train.SummaryWriter(tensorboard_path + '/train', sess.graph)
+            # validation_writer = tf.train.SummaryWriter(tensorboard_path + '/vali', sess.graph)
+            # test_writer = tf.train.SummaryWriter(tensorboard_path + '/test', sess.graph)
+
+            # hy register finished class learning
+            pred_y_diff = 0
+            e = 0
+
+            print 'batch size:', FLAGS.batch_size
+            total_batches = int(train_size / FLAGS.batch_size)
+            im_to = 0
+            # f_e = float(MAX_ITERATION * FLAGS.batch_size / train_size)
+            # i_e = int(MAX_ITERATION * FLAGS.batch_size / train_size)
+
+            train_ith_batch = 0
+            for i in xrange(current_step, current_step + MAX_ITERATION + MAX_ITERATION):
+                start_time = time.time()
+                ## Set batch data  #############################################################
+                # im_from = im_to if im_to < train_size-1 else 0
+                # im_to = min(train_size - 1, im_from + FLAGS.batch_size)
+
+                train_index = randint(0, train_size - FLAGS.batch_size)
+                im_from, im_to = train_index, train_index + FLAGS.batch_size
+
+                # print 'from',im_from,'to',im_to
+
+                for batch_step in xrange(FLAGS.batch_size):
+                    batch_xs, batch_ys = images[im_from:im_to], masks[im_from:im_to]
+                # cv2.imshow('tmp_ys',batch_ys[-1,:,:])
+
+                batch_xs = batch_xs.reshape(-1, h, w, INPUT_CH)  # cat
+                batch_ys = batch_ys.reshape(-1, h, w, 1)
+
+                ## Feed batch data   ############################################################
+                feed_dict = {"x:0": batch_xs, "y:0": batch_ys, "keep_prob:0": dropout_def}
+                feed_dict_view = {"x:0": batch_xs, "y:0": batch_ys, "keep_prob:0": dropout_1s}
+
+                ## Start Training  ##############################################################
+                loss = sess.run(cost, feed_dict=feed_dict)
+                y_sess_value = sess.run(y, feed_dict=feed_dict_view)
+                y_sess_value = np.squeeze(y_sess_value, axis=3)
+                # print '========== y_sess shape:', y_sess_value.shape
+
+                sess.run(optimize_op, feed_dict=feed_dict)
+
+                view_interval = 500
+                if i < 1000:
+                    view_interval = 50
+                if i > 1000 and i < 5000:
+                    view_interval = 250
+
+                if i > 5000:
+                    view_interval = 1000
+
+                if i > 50000:
+                    view_interval = 2000
+
+                glb_step = i
+                if i % view_interval == 0:
+                    # summary_str = sess.run(summary, feed_dict={x: batch_xs, y: batch_ys, keep_prob: dropout})
+                    # summary_writer.add_summary(summary_str, step)
+                    train_ith_batch = 0 if train_ith_batch >= total_batches - view_interval else train_ith_batch + view_interval
+
+                    # print 'Elapsed time:', "{:.2f}".format(elapsed_time / 60), 'min'
+                    ## Validation  ####################################################################
+                    # val1_acc = sess.run(accuracy, feed_dict={x: val1_batch_xs, y: val1_batch_ys, keep_prob: dropout_1s})
+                    train_res = sess.run(summary_op, feed_dict=feed_dict_view)
+                    train_writer.add_summary(train_res, i)
+
+                    elapsed_time = int(time.time() - start_time)
+                    t_str = datetime.now().strftime('%H-%M-%S')
+                    print " %2d-%2d/%2d %s ---> -ETA: %ds -\tloss: %g" % (
+                        i, train_ith_batch, total_batches, t_str, elapsed_time, loss)
+
+                # if  i % total_batches == 0:
+                if i % view_interval == 0:  # and i > current_step + 500:
+                    save_all_models = 1
+                    if save_all_models == 1:
+                        mn = model_log_name + '_' + str(batch_step) + '_I_loss' + str(round(loss, 2))
+                        model_save = FLAGS.logs_dir + mn
+                        saver.save(sess, save_path=model_save,
+                                   global_step=glb_step)  # saver.save(sess, FLAGS.logs_dir + "model.ckpt", itr)
+                        classifier_model = model_save + '-' + str(i) + '.meta'
+                        print '--- ---> Iter %5d: saving model to %s' % (glb_step, classifier_model)
+                        e += 1
+
+                    # print 'download images'
+                    # tools.save_tb_imgs(tensorboard_path + str(i)) #visualization
+                    # online test
+                    do_online_test = True
+                    if do_online_test:
+                        n, diff_v = count_diff_pixel_values(y_sess_value[0], h, w)
+                        print 'num of diff values in y_sess:', n, ', diff:', diff_v
+                        # print 'y_int:', y_int_sess   #(?, 320, 320, 1), dtype=int32)
+
+                        avg, dice_results, dice_cad_results = \
+                            test_seg_tf_model_online(dice_results, dice_cad_results, tensorboard_path + str(i),
+                                                     classifier_model, h, w, dropout_1s, i)
+                        print '================================> step ', glb_step, ' test average dice:', avg
+
+                    control_save = True
+                    if control_save:
+                        if avg > 0.12 and avg < 1 and i < int(1e7 + 1):
+                            # save the model
+                            model_save2 = FLAGS.logs_dir + model_log_name + '_II_avg' + str(round(avg, 2))
+                            saver.save(sess, save_path=model_save2, global_step=glb_step)
+                            print 'model save', model_save2
+                            cmd = 'mv ' + FLAGS.logs_dir + 'model*II* ' + tensor_model_sum_path
+                            os.system(cmd)
+
+                            cmd = 'rm ' + FLAGS.logs_dir + 'model*I*'
+                            os.system(cmd)
+                        elif avg > 0.4 and avg < 1:
+                            model_save2 = FLAGS.logs_dir + model_log_name + '_II_avg' + str(round(avg, 2))
+                            saver.save(sess, save_path=model_save2, global_step=glb_step)
+                            print 'model save', model_save2
+                            cmd = 'mv ' + FLAGS.logs_dir + 'model*II* ' + tensor_model_sum_path
+                            os.system(cmd)
+
+                            cmd = 'rm ' + FLAGS.logs_dir + 'model*I*'
+                            os.system(cmd)
+
+                    save_online_eva_to_file = True
+                    if save_online_eva_to_file:
+                        # keyword = os.path.basename(os.path.normpath(FLAGS.log_dir))
+                        keyword = 'dice_results'
+                        dice_txt = dice_results + dice_cad_results
+                        save_str_to_file(FLAGS.logs_dir + keyword + '.txt', dice_txt)
+
+                    if set_STOP:
+                        print 'STOP is set'
+                        break
+
+                if i % (view_interval * 2) == 0:
+                    REMOVE_IMAGES = True
+                    if REMOVE_IMAGES and glb_step > 1:
+                        if avg < 0.01:
+                            # remove saved images
+                            cmd = 'rm ' + FLAGS.tb_dir + str(glb_step) + 'com*'
+                            os.system(cmd)
+
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    print 'key interrupt'
+                    break
+
+        #################
+        if FLAGS.mode == 'visualize':
+            for view_i in xrange(len(images) - 1):
+                im_from, im_to = view_i, view_i + 1
+                # train_index = randint(0, train_size - FLAGS.batch_size)
+                # im_from, im_to = train_index, train_index + FLAGS.batch_size
+
+                batch_xs, batch_ys = images[im_from:im_to], masks[im_from:im_to]
+
+                batch_xs = batch_xs.reshape(-1, h, w, 3)  # cat
+                batch_ys = batch_ys.reshape(-1, h, w, 1)
+
+                ## Feed batch data   ############################################################
+                feed_dict_view = {x: batch_xs, y: batch_ys, keep_prob: dropout_1s}
+
+                ################################################################
+                pred = sess.run(annotation_pred, feed_dict=feed_dict_view)
+                pred = np.squeeze(pred, axis=3)
+                print 'pred shape', pred.shape
+
+                conv19_view = sess.run('conv19:0', feed_dict=feed_dict_view)
+
+                show_value = False
+                if show_value:
+                    counter = 0
+                    for i in xrange(320):
+                        for j in xrange(100, 320):
+                            counter += 1
+                            if counter % 100 == 0:
+                                print '\n'
+                            print pred[0][i][j],
+
+                cv2.imshow('pred', pred[0].astype(np.uint8) * 255)
+                cv2.imshow('conv19', conv19_view[0].astype(np.uint8))
+                cv2.waitKey()
+
+        print "\nOptimization Finished!"
+
+
+#######################################
+
+#######################################
+if 'only_validate_data' in FLAGS.mode:
+    load_and_preprocess_data(320, 320)
+
+if 'train' in FLAGS.mode or 'visualize' in FLAGS.mode:
+    train_2c_tensorflow(320, 320)
+
+    print("Training done!")
+
+
+# if __name__ == "__main__":#
+#	tf.app.run()
+
+#wang
 import tensorflow as tf
 import numpy as np
 import tflearn
