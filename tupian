@@ -1,0 +1,2512 @@
+#//***********************************************************************************************//
+#//                                                                                               //
+#//    BSD - License                                                                              //
+#//                                                                                               //
+#//    Copyright(c) 2017                                                                          //
+#//                                                                                               //
+#//                                                                                               //
+#//    Author : H                                                                         //
+#//    E-mail: s@yahoo.com                                                               //
+#//                                                                                               //
+#//    All rights reserved.                                                                       //
+#//                                                                                               //
+#//    Redistribution and use in source and binary forms, with or without modification, are       //
+#//    permitted provided that the following conditions are met:                                  //
+#//      1. Redistributions of source code must retain the above copyright notice, this list      //
+#//         of conditions and the following disclaimer.                                           //
+#//      2. Redistributions in binary form must reproduce the above copyright notice, this        //
+#//         list of conditions and the following disclaimer in the documentation and / or         //
+#//         other materials provided with the distribution.                                       //
+#//      3. Neither the name of the copyright holder nor the names of its contributors may be     //
+#//         used to endorse or promote products derived from this software without specific       //
+#//         prior written permission.                                                             //
+#//                                                                                               //
+#//    DISCLAIMER                                                                                 //
+#//    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY        //
+#//    EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF    //
+#//    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.IN NO EVENT SHALL      //
+#//    THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,       //
+#//    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT    //
+#//    OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS                //
+#//    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,          //
+#//    STRICT LIABILITY, OR TORT(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF     //
+#//    THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               //
+#//                                                                                               //
+#//***********************************************************************************************//
+
+# sudo apt-get install imagemagick #display pil
+from __future__ import division  # for division with float result, must put at the top of this file to make it work
+
+import subprocess
+from PIL import Image  # for resize func
+import random
+from random import randint
+import glob
+import os
+import re
+import string
+import cv2
+import pickle
+import imutils
+import numpy as np
+
+# import matplotlib.pyplot as plt
+import psutil as psutil
+import time
+
+import settings
+PROJ_DIR = '/home/adas/Documents/'
+settings.set_global()
+
+SWITCH_data_augmentation = 1
+SWITCH_organize_data = 0
+
+rotateflipImg_ = 0
+augment_data_1_to_n_ = 0
+resizeImage_ = 0  # hy set to 1 to resize image using the function resize defined below
+do_cropImg_ = 0  # in-distor_in out-inputpatches
+do_crop_roi = 0
+
+prepare_active_fields = 0
+put_objects_n_in_1_lila_ = 0
+crop_seg_img_mask_pair_ = 0
+add_background_to_CAD_mul_mas = 1
+replace_black_ = 0
+replace_white_ = 0
+replace_element_in_array_ = 0
+check_mask_class_num_ = 0
+ceil_pixel_values_ = 0
+remove_small_obj_ = 0
+get_PCA_ = 0
+do_convertPCA_ = 0
+convertPCA_ = 0
+cropImage_none_overlap_ = 0
+
+######### org data
+split_Data = 0
+
+############################################
+ImageType = '.jpg'
+length = len(settings.LABELS)
+fileprefix = settings.LABEL_names
+
+# control
+if SWITCH_data_augmentation == 0:
+	resizeImage_ = 0
+	augment_data_1_to_n_ = 0
+	do_cropImg_ = 0
+	remove_small_obj_ = 0
+	rotateflipImg_ = 0
+	prepare_active_fields = 0
+	add_background_to_CAD_mul_mas = 0
+	add_background_to_CAD_bin_mask_ = 0
+	put_objects_n_in_1_lila_ = 0
+	replace_black_ = 0
+	replace_white_ = 0
+	replace_element_in_array_ = 0
+	check_mask_class_num_ = 0
+	ceil_pixel_values_ = 0
+	get_PCA_ = 0
+	convertPCA_ = 0
+	cropImage_none_overlap_ = 0
+
+if SWITCH_organize_data == 0:
+	REMOVE_Inputpatches = 0
+	REMOVE_Inputpatches_outside = 0
+	REMOVE_TmpData = 0
+	REMOVE_Data = 0
+	REMOVE_Test_Images = 0
+	
+	split_Data = 0
+	split_Inputpatches = 0
+	split_Test_Images = 0
+
+###################################################
+
+def do_REMOVE_TmpData():
+	print 'removing tmp data'
+	for i in xrange(length):
+		dir = settings.tmp + settings.LABELS[i]
+		for f in os.listdir(dir):
+			if re.search('/*.jpg', f) is not None:
+				os.remove(os.path.join(dir, f))
+	
+	dir2 = settings.tmp2
+	for f2 in os.listdir(dir2):
+		if re.search('/*.jpg', f2) is not None:
+			os.remove(os.path.join(dir2, f2))
+
+
+if REMOVE_TmpData == 1:
+	do_REMOVE_TmpData()
+
+#########################################################
+# Distortion
+# resize, Transition, Rotation 5 Degree, flipping, noise, histogram Eq
+########################################################
+# hy: config for rotateflipImg()
+# OUTPUT_tmp = '../tmp/'
+# hy: define labels locally, if only the classes selected need to be augmented
+# LABELS = ['hinten', 'links', 'oben', 'rechts', 'unten', 'vorn','neg']
+Clockwise = 0
+Rotation_Angle = 141  # 90,180,270
+Anti_clockwise = 1
+Flip_X = 1  # 1 #hy: rechts can have flip_x,
+
+Flip_Y = 1
+Flip_XY = 0
+do_perspectiveTransform_in = 0
+noise_level = 0
+step = 1
+Aspect_Factor = 0.2
+random_add = 4
+
+tmp_PATH = '../tmp/tmp2/'  # copy of original training data (before distortions)
+DEBUG = False  #
+#
+# INPUT_PATCHES_PATH = '../tmp/input_patches/'
+INPUT_PATCHES_PATH = '../tmp/tmp2/'
+# INPUT_PATCHES_PATH = settings.data
+DATA_PATH = settings.data  # save to path
+
+
+def rotateflipImg(patch_size=0, Rotation_Angle=Rotation_Angle, Flip_X=Flip_X, noise_level=noise_level, step=0):  #
+	# def rotateflipImg(Rotation_Angle,Flip_X,noise_level,step):
+	
+	print 'doing rotation or flipping', Rotation_Angle, ',', Flip_X, ',st', step, \
+		',noise=', noise_level, ',do_perspectiveTransform_in=', do_perspectiveTransform_in
+	
+	print 'removing tmp data'
+	for i in xrange(len(settings.LABELS)):
+		dir = settings.tmp + settings.LABELS[i]
+		for f in os.listdir(dir):
+			if re.search('/*.jpg', f) is not None:
+				os.remove(os.path.join(dir, f))
+	
+	filelist = glob.glob(INPUT_PATCHES_PATH + '/*')
+	
+	# print 'filelist,', filelist
+	for filename in filelist:
+		for label in settings.LABELS:
+			
+			if string.find(filename + '/', label) != -1:  # hy:return index if found, or -1 if not found
+				
+				OUTPUT_PATH = DATA_PATH + label
+				
+				# If error occurs, possibly because some old file name errors, e.g. contain _ in the end'
+				
+				filelist_tmp = glob.glob(INPUT_PATCHES_PATH + label + '*')
+				random.shuffle(filelist_tmp)
+				
+				# hy:use fixed additional amount of data
+				# random_add = 1
+				# random_add = 7*len(settings.LABELS)
+				
+				# hy: use proportional setting
+				# random_add = int(len(filelist_tmp) * 0.70)
+				
+				filelist_add = filelist_tmp[0:random_add]
+				
+				# print len(filelist_tmp)
+				# for file in filelist_tmp: #hy if all data should be used
+				for file in filelist_add:  # hy if only part data should be used
+					file.split('/')[-1]
+					# print file.split('/')[-1]
+					original = cv2.imread(file)
+					Height, Width, Channel = original.shape
+					# print original.shape
+					
+					### Rotation start ##############################################################
+					if Anti_clockwise == 1 and Rotation_Angle <> 0:
+						# Counter-Clockwise: Zooming in, rotating, cropping
+						# rotated_tmp = cv2.resize(original, (Width + 40, Height + 20), interpolation=cv2.INTER_LINEAR)
+						# rotated_tmp = imutils.rotate(rotated_tmp, angle=Rotation_Angle)
+						# rotated = rotated_tmp[10:Height + 10, 20:Width + 20]
+						# print rotated.shape
+						# rotated = imutils.resize(rotated, width=Width,
+						#        height=Height)
+						
+						rotated = imutils.rotate(original, angle=Rotation_Angle)
+						new_file = OUTPUT_PATH + os.path.basename(os.path.normpath(file))[:-4] + '_st' + str(
+							step) + '_rotatedCC_' + str(
+							Rotation_Angle) + ImageType  # hy: split by .jpg, with '.' to avoid extra '.' in file name
+						cv2.imwrite(new_file, rotated)
+					
+					if Clockwise == 1 and Rotation_Angle <> 0:
+						# Clockwise
+						rotated_tmp = cv2.resize(original, (Width + 40, Height + 20), interpolation=cv2.INTER_LINEAR)
+						rotated_tmp = imutils.rotate(rotated_tmp, angle=Rotation_Angle * -1)
+						rotated = rotated_tmp[10:Height + 10, 20:Width + 20]
+						# print rotated.shape
+						rotated = imutils.resize(rotated, width=Width, height=Height)
+						new_file = OUTPUT_PATH + os.path.basename(os.path.normpath(file))[:-4] + '_st' + str(
+							step) + '_rotatedC_' + str(Rotation_Angle) + ImageType
+						cv2.imwrite(new_file, rotated)
+					
+					### Perspective Transform begin  #################################################
+					f_outs = []
+					if do_perspectiveTransform_in == 1:
+						# print 'file',file
+						# h, w, ch = original.shape
+						# print 'h,w,ch', h, w, ch
+						# rand1 = randint(2,30)
+						# rand2 = randint(2,30)
+						aspect_w = int(Aspect_Factor * Width)
+						for i in xrange(aspect_w, aspect_w + 2):
+							for j in xrange(14, 16):
+								pts1 = np.float32([[i, 0], [Width - i, 0], [j, Height - j], [Width - i, Height - j]])
+								# pts1 = np.float32([[rand1, 0], [patch_size+rand1, 0], [rand2, patch_size], [patch_size, patch_size]])
+								pts2 = np.float32([[0, 0], [Width, 0], [0, Height], [Width, Height]])  # leftT,rT,leftB,rB
+								# pts2 = np.float32([[0, 0], [patch_size, 0], [0, patch_size], [patch_size, patch_size]])  # leftT,rT,leftB,rB
+								
+								M = cv2.getPerspectiveTransform(pts1, pts2)
+								
+								dst = cv2.warpPerspective(original, M, (Width, Height))  # (w,h)
+								# dst = cv2.warpPerspective(img,M,(patch_size,patch_size)) #(w,h)
+								f_out = OUTPUT_PATH + os.path.basename(os.path.normpath(file))[:-4] + '_persp_' + str(i) + '_' + str(
+									j) + ImageType
+								# f_out = '../Data/data_1_mix/save/prep/' + os.path.basename(file) + '_persp_' + str(i) + '_' + str(j) + ImageType
+								print f_out
+								f_outs.append(f_out)
+								cv2.imwrite(f_out, dst)
+						print 'can generate num of new files with perspective transformation', len(f_outs)
+					
+					### Perspective Transform end    #################################################
+					
+					
+					### add noise begin ##############################################################
+					if noise_level <> 0:
+						img_gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+						
+						# img = img.astype(np.float32)
+						img_noised = img_gray + np.random.rand(Width, Height) * noise_level
+						img_noised = (img_noised / np.max(img_noised)) * 255
+						new_file = OUTPUT_PATH + os.path.basename(os.path.normpath(file))[:-4] + '_st' + str(
+							step) + '_NOI' + ImageType
+						cv2.imwrite(new_file, img_noised)
+					### add noise end    ##############################################################
+
+if rotateflipImg_ == 1:
+	# rotateflipImg()
+	rotateflipImg(Rotation_Angle=Rotation_Angle, Flip_X=Flip_X, noise_level=noise_level, step=step)
+
+
+########################################################
+def crop_seq(im, w, h,crop_dest_path, stride,crop_num, patch_size, patch_size_h, bboxes_d, bboxes_u, fname_wo_end, save_file):
+	# from lt to rb
+	num_of_samples = 0
+	for x in xrange(w):
+		if (x * stride + patch_size) > w or num_of_samples > int(crop_num / 2):
+			break
+		for y in xrange(h):
+			if (y * stride + patch_size) > h or num_of_samples > int(crop_num / 2):
+				break
+			print 'box', x * stride, y * stride, x * stride + patch_size, y * stride + patch_size_h
+			# crop from left
+			bbox = (x * stride, y * stride, x * stride + patch_size, y * stride + patch_size_h)
+			bbox_im = im.crop(bbox)
+			bboxes_u.append(bbox_im)
+			bboxes_d.append(bbox)
+			# save
+			if save_file:
+				slice = im.crop(bbox).save(
+					crop_dest_path + fname_wo_end + '_d' + str(x * stride) + '_' + str(y * stride) +
+					str(patch_size) + ImageType, optimize=True, bits=6)
+			num_of_samples = len(bboxes_u) + len(bboxes_d)
+	print 'can generate d-num of samples', num_of_samples
+	
+	# from rb to lt
+	num_of_samples = 0
+	for x in xrange(w):
+		if (x * stride + patch_size) > w - x * stride or num_of_samples > crop_num:
+			break
+		for y in xrange(h):
+			if (y * stride + patch_size) > h or num_of_samples > crop_num:
+				break
+			# crop from right
+			bbox = (w - x * stride - patch_size, h - y * stride - patch_size_h, w - x * stride, h - y * stride)
+			bbox_im = im.crop(bbox)
+			bboxes_u.append(bbox_im)
+			
+			if save_file:
+				slice = im.crop(bbox).save(
+					crop_dest_path + fname_wo_end + '_u' + str(w - x * stride) + '_' + str(h - y * stride) +
+					str(patch_size) + ImageType, optimize=True, bits=6)
+			num_of_samples = len(bboxes_u) + len(bboxes_d)
+	print 'can generate u-num of samples', num_of_samples
+
+def crop_random(im, w, h,crop_dest_path, stride,crop_num, patch_size, patch_size_h, bboxes_d, bboxes_u, fname_wo_end, save_file):
+	# hy: random cropping, setting random left position
+	for imgN in xrange(crop_num):
+		x = randint(1, w - stride + 1)
+		y = randint(1, h - stride + 1)
+		bbox = (x * stride, y * stride, x * stride + patch_size, y * stride + patch_size_h)
+		bbox_im = im.crop(bbox)
+		bboxes_u.append(bbox_im)
+		
+		if save_file:
+			slice = im.crop(bbox).save(
+				crop_dest_path + fname_wo_end + str(imgN) + '_' + str(stride) + '_l' + str(
+					x * stride) + '_' + str(
+					y * stride) + ImageType, optimize=True, bits=6)
+	
+	# hy: random cropping, setting random right position
+	for imgM in xrange(crop_num):
+		x = randint(1, w - stride + 1)
+		y = randint(1, h - stride + 1)
+		bbox = (x * stride - patch_size, y * stride - patch_size_h, x * stride, y * stride)
+		bbox_im = im.crop(bbox)
+		bboxes_u.append(bbox_im)
+		
+		if save_file:
+			slice = im.crop(bbox).save(
+				crop_dest_path + fname_wo_end + str(imgM) + '_' + str(stride) + '_r' + str(
+					x * stride) + '_' + str(
+					y * stride) + ImageType, optimize=True, bits=6)
+
+def crop_random_dense(im, w, h,crop_dest_path, stride, crop_num, patch_size, patch_size_h, bboxes, bboxes_im, fname_wo_end,
+                      crop_left_patch=True, crop_right_patch=True, crop_center_patch=True, save_file=False):
+	print 'method: random_dense'
+	# patch_size = int(min(w, h)*0.995)
+	# patch_size_h = patch_size
+	# print 'patch size', patch_size, ',', patch_size_h
+	print 'w,h before cropping:', w, ',', h
+	
+	# hy: random cropping, setting random left position
+	# crop_left_patch = True
+	if crop_left_patch:
+		for imgN in xrange(crop_num):
+			x = randint(1, w - patch_size + 1)
+			y = randint(1, h - patch_size_h + 1)  # 346-1-295+1=50
+			print x, ',', y
+			bbox = (x * stride, y * stride, x * stride + patch_size, y * stride + patch_size_h)
+			bbox_im = im.crop(bbox)
+			print 'add image'
+			bboxes.append(bbox)
+			bboxes_im.append(bbox_im)
+			
+			if save_file:
+				slice = im.crop(bbox).save(
+					crop_dest_path + fname_wo_end + '_' + str(stride) + '_ex' + str(
+						x * stride) + '_' + str(y * stride) + ImageType, optimize=True, bits=6)
+	
+	# crop_right_patch = True
+	# hy: random cropping, setting random right position
+	if crop_right_patch:
+		for imgM in xrange(crop_num):
+			if patch_size == w or patch_size_h == h:
+				#x = 0
+				#y = patch_size  # 1+224, 234
+				print 'img size too small'
+				break
+			else:
+				x = randint(w - 8, w - 1)
+				y = randint(1 + patch_size_h, h - 1)  # 1+224, 234
+			# x = randint(1 + patch_size, w - 1)
+			# y = randint(1 + patch_size_h, h - 1)  # 1+224, 234
+			# bbox = (x * stride - patch_size, y * stride - patch_size_h, x * stride, y * stride)
+			bbox = (x - patch_size, y - patch_size_h, x, y)
+			bbox_im = im.crop(bbox)
+			bboxes.append(bbox)
+			bboxes_im.append(bbox_im)
+			print 'add image'
+			
+			if save_file:
+				slice = im.crop(bbox).save(
+					crop_dest_path + fname_wo_end + '_' + str(stride) + '_ex' + str(
+						x * stride - patch_size) + '_' + str(y * stride - patch_size_h) + ImageType, optimize=True,
+					bits=6)
+	
+	# crop_center_patch = True
+	if max(w, h) / min(w, h) >= 1.5 and crop_center_patch:
+		# hy: random cropping, setting random center position
+		print 'rectangular img'
+		for imgN in xrange(crop_num):
+			x = randint(int((w - patch_size) / 5), w - stride - patch_size + 1)
+			y = randint(1, h - stride - patch_size_h + 1)  # 235-1-224+1=11
+			# y = randint(1, h - stride - patch_size_h + 1)
+			bbox = (x * stride, y * stride, x * stride + patch_size, y * stride + patch_size_h)
+			bbox_im = im.crop(bbox)
+			print 'add image'
+			bboxes.append(bbox)
+			bboxes_im.append(bbox_im)
+			
+			if save_file:
+				slice = im.crop(bbox).save(
+					crop_dest_path + fname_wo_end + '_' + str(stride) + '_ex' + str(
+						x * stride) + '_' + str(y * stride) + ImageType, optimize=True, bits=6)
+	
+	return bboxes, bboxes_im
+
+def resize_Image_type(im,w,h,scalesize):
+	if w > h:
+		scalesize_b = scalesize
+		scalesize_a = int(scalesize * w / h)  # hy keep proportion
+	else:
+		scalesize_a = scalesize
+		scalesize_b = scalesize * int(h / w)
+
+	im_rz = im.resize((scalesize_a, scalesize_b),Image.BICUBIC)
+	return im_rz
+
+def do_cropImg_1_to_n(crop_method='', crop_path_fn='', crop_dest_path='',
+                      patch_size=0, patch_size_h=0, stride=0, crop_num=1,
+                      crop_left_patch=True, crop_right_patch=True, crop_center_patch=True,
+                      save_file=False):
+	print 'doing cropping', crop_method, crop_path_fn, crop_dest_path, \
+		', expected patch size:', patch_size, patch_size_h, stride, crop_num, save_file
+	
+	bboxes_d, bboxes_u, bboxes_im_d, bboxes_im_u = [], [], [], []
+	bboxes, bboxes_im = [], []
+	
+	if os.path.isfile(crop_path_fn):
+		
+		im = Image.open(crop_path_fn)
+		fname_wo_end = os.path.splitext(os.path.basename(crop_path_fn))[0]
+		
+		w, h = im.size
+		print 'image original size w,h:', w, ',', h
+		if min(w,h)< patch_size: #patch_size*1.35:
+			print 'image is too small for cropping'
+		else:
+			if crop_method == 'seq':
+				crop_seq(im, w, h,crop_dest_path, stride, crop_num,patch_size, patch_size_h, bboxes_d, bboxes_u, fname_wo_end, save_file)
+
+			if crop_method == 'random':  # '''
+				crop_random(im, w, h, crop_dest_path,stride, crop_num,patch_size, patch_size_h, bboxes_d, bboxes_u, fname_wo_end, save_file)
+
+			if crop_method == 'random_dense':
+				crop_random_dense(im, w, h, crop_dest_path,stride, crop_num, patch_size, patch_size_h, bboxes, bboxes_im, fname_wo_end,
+								  crop_left_patch, crop_right_patch, crop_center_patch, save_file)
+	
+	else:
+		print 'End of file in this folder'
+	
+	if save_file:
+		num_of_samples = len(os.listdir(crop_dest_path))
+		print 'files generated', num_of_samples
+		
+		if os.listdir(crop_dest_path):
+			print 'files are saved in', crop_dest_path
+	return bboxes, bboxes_im
+
+
+def do_cropImg(crop_method='', crop_source_path='', crop_dest_path='',
+               patch_size=0, patch_size_h=0, stride=1,
+               crop_left_patch=True, crop_right_patch=True, crop_center_patch=True):
+	print 'doing cropping'
+	# dirs_complete = os.listdir(crop_source_path)
+	dirs = os.listdir(crop_source_path)
+	print 'crop source path', crop_source_path
+	# dirs = [s for s in dirs_complete if os.path.basename(os.path.normpath(crop_dest_path)) in s and ImageType in s]
+	# print dirs
+	num_of_samples = 0
+	bboxes_d = []
+	bboxes_u = []
+	for item in dirs:
+		print crop_source_path + item
+		if os.path.isfile(crop_source_path + item):
+			
+			im = Image.open(crop_source_path + item)
+			fname_wo_end = os.path.splitext(item)[0]
+			
+			w, h = im.size
+			# patch_size = int(min(w,h)*0.98)
+			# patch_size_h = patch_size
+			# print 'w,h:',w,',',h
+			# hy usage: crop((left_x1,top_y1,   right_x2,bottom_y2)).save(file_path,file_extention,quality=0_to-100)
+			# rangex = w - stride + 1
+			# rangey = h - stride + 1
+			print 'crop_source_path + item', crop_source_path + item
+			do_cropImg_1_to_n(crop_method=crop_method, crop_path_fn=crop_source_path + item, crop_dest_path=crop_dest_path,
+			                  patch_size=patch_size, patch_size_h=patch_size_h, stride=1, crop_num=1,
+			                  crop_left_patch=crop_left_patch, crop_right_patch=crop_right_patch,
+			                  crop_center_patch=crop_center_patch,
+			                  save_file=True)
+		
+		else:
+			print 'End of file in this folder'
+	
+	num_of_samples = len(os.listdir(crop_dest_path))
+	print 'files generated', num_of_samples
+	
+	if not os.listdir(crop_dest_path):
+		print 'no file generated, check error'
+	else:
+		print 'files are saved in', crop_dest_path
+
+
+if do_cropImg_ == 1:
+	do_cropImg()
+
+
+# do_cropImg(crop_method=crop_method,crop_source_path=crop_source_path,
+#      crop_dest_path=crop_dest_path,patch_size=patch_size,patch_size_h=patch_size_h,stride=stride)
+
+
+# First crop center, then resize to patch size
+def crop_center(f_img=None, stride=1,crop_num=1, crop_w=0, crop_h=0, crop_dest_path='', patch_size=0, save_file=False):
+	print 'crop center from img', f_img
+	im = Image.open(f_img)
+	# im = f_img
+	w, h = im.size  # correct order w,h
+	
+	# crop_size = int(min(h, w) * 1)
+	# crop_size_h = patch_size
+	
+	crop_size = crop_w
+	crop_size_h = crop_h
+	
+	print 'h,w', h, w
+	bboxes = []
+	
+	for imgN in xrange(crop_num):
+		# hy: random cropping, setting random center position
+		x = randint(int((w - crop_size) / 2 * 0.99),
+		            int((w - crop_size) / 2 * 1.07))  # adjust obj position in resulting image
+		y = randint(int((h - crop_size) / 2 * 0.99), int((h - crop_size) / 2 * 1.01))
+		# x = int((w - crop_size)/2 *0.97)
+		# y = int((h - crop_size)/2 *0.9)
+		bbox = (x * stride, y * stride, x * stride + patch_size, y * stride + patch_size)
+		bbox_im = im.crop(bbox)
+		bbox_im.thumbnail((crop_h, crop_w), Image.ANTIALIAS)  # an action, check order
+		bbox_res1 = bbox_im.convert("RGBA")
+		bboxes.append(bbox_res1)
+		
+		if save_file:
+			fbase_name = os.path.basename(f_img)
+			fname_wo_end = os.path.splitext(fbase_name)[0]
+			print fname_wo_end, 'f full', crop_dest_path + fname_wo_end + '_' + str(stride) + '_ex' + str(
+				x * stride) + '_' + str(y * stride) + ImageType
+			slice = im.crop(bbox).save(
+				crop_dest_path + fname_wo_end + '_' + str(stride) + '_ex' + str(x * stride) + '_' + str(y * stride) + ImageType,
+				optimize=True, bits=6)
+			print 'file are saved in', crop_dest_path
+	
+	return bboxes
+
+
+######################################################
+crop2_source_path = '../tmp/distor_in/camImgs/testPkg7/'  # settings.LABELPATH
+crop2_dest_path = '../tmp/distor_in/camImgs/'
+equally_crop = 0
+select_crop = 1
+crop_opt = 'equal'  # 'equal' #'custom'
+num_of_parts_per_row = 4
+
+
+def cropImage_none_overlap(crop2_source_path=crop2_source_path, crop2_dest_path=crop2_dest_path,
+                           crop_opt=crop_opt, num_of_parts_per_row=num_of_parts_per_row):  # do_crop_none_overlap
+	print 'doing cropping without overlap'
+	if not os.listdir(crop2_source_path):
+		print 'no file to crop'
+		exit(1)
+	# patch_size_h = 28  # int(patch_size * 0.75)
+	dirs_complete = os.listdir(crop2_source_path)
+	dirs = [s for s in dirs_complete if os.path.basename(os.path.normpath(crop_dest_path)) in s]
+	# dirs = [s for s in dirs_complete if 'oben' in s]
+	print dirs
+	
+	for item in dirs:
+		if os.path.isfile(crop2_source_path + item):
+			# item = 'hinten_ori1_rz400.jpg'
+			im = Image.open(crop2_source_path + item)
+			
+			# hy: two methods for getting file name
+			# fpath, fname = os.path.split(source_path + item)
+			# fname =  os.path.basename(source_path + item)
+			
+			fname_wo_end = os.path.splitext(item)[0]
+			# print 'image name:', fname_wo_end
+			
+			w, h = im.size
+			# print 'w,h:',w,',',h
+			# hy usage: crop((left_x1,top_y1,   right_x2,bottom_y2)).save(file_path,file_extention,quality=0_to-100)
+			# hy: split image into parts
+			if crop_opt == 'equal':
+				# 10x10 parts
+				for row in xrange(0, num_of_parts_per_row):
+					for col in xrange(0, num_of_parts_per_row):
+						bbox = (int(col * w / num_of_parts_per_row), int(row * h / num_of_parts_per_row),
+						        int((col + 1) * w / num_of_parts_per_row), int((row + 1) * h / num_of_parts_per_row))
+						slice = im.crop(bbox).save(crop2_dest_path + fname_wo_end + 'r_' + str(row) + '_c_' + str(col) + ImageType,
+						                           optimize=True, bits=6)
+						print 'files are saved in', crop2_dest_path, len(os.listdir(crop2_dest_path))
+			if crop_opt == 'custom':
+				# left, right parts
+				bbox = (int(0.1 * w), int(0.24 * h), int(0.8 * w), int(0.85 * h))
+				slice = im.crop(bbox).save(crop2_dest_path + fname_wo_end + '_' + ImageType, optimize=True, bits=6)
+			
+			# bbox = (int(0.5 * w), 0, w, h,)
+			# slice = im.crop(bbox).save(crop2_dest_path + fname_wo_end + '_tou' + ImageType, optimize=True, bits=6)
+
+
+if cropImage_none_overlap_ == 1:
+	cropImage_none_overlap()
+
+
+####################################################################################################
+# crop only object out from images with pure lila bg
+def crop_roi(im, display=False):
+	# im is of type Image PIL
+	x1, y1, x2, y2 = 0, 0, 0, 0
+	pix = im.convert('LA').load()
+	for y in xrange(im.size[1]):
+		for x in xrange(im.size[0]):
+			# print 'pix[x,y]',pix[x,y]
+			if pix[x, y] != (92, 255):
+				y1 = y
+				# print 'x,y top-left y',x,y, '--y1',y1
+				break
+		else:
+			continue
+		break
+	
+	for x in xrange(im.size[0]):
+		for y in xrange(im.size[1]):
+			if pix[x, y] != (92, 255):
+				x1 = x
+				# print 'x,y top-left x',x,y, '--x1',x1
+				break
+		else:
+			continue
+		break
+	
+	for x in xrange(im.size[0]):
+		for y in xrange(im.size[1]):
+			# print 'pix[x,y]', pix[x, y]
+			if pix[im.size[0] - x - 1, im.size[1] - y - 1] != (92, 255):
+				x2 = im.size[0] - x - 1
+				# print 'x,y bottom-right y', y2, '--x2',x2
+				break
+		else:
+			continue
+		break
+	
+	for y in xrange(im.size[1]):
+		for x in xrange(im.size[0]):
+			if pix[im.size[0] - x - 1, im.size[1] - y - 1] != (92, 255):
+				y2 = im.size[1] - y - 1
+				# print 'x,y bottom-right y', x, y, '--y2',y2
+				break
+		else:
+			continue
+		break
+	bbox = (x1, y1, x2, y2)  # x1,y1, x2,y2
+	# bbox = (x * stride, y * stride, x * stride + patch_size, y * stride + patch_size) #x1,y1, x2,y2
+	bbox_im = im.crop(bbox)
+	if display:
+		display_im(bbox_im)
+	return bbox_im
+
+
+if do_crop_roi == 1:
+	crop_roi(im=Image.open('../tmp/CAD/lila2/full/hinten3_lila_bg_clear.jpg'))
+
+########################################################################################################
+scalesize = 320  # 48 for resize scale 172, 79,
+resize_INPUT_PATH = '../Data/data_3_unet/'  # settings.LABELPATH
+# resize_INPUT_PATH = '../tmp/input_patches/' #settings.LABELPATH
+resized_path = '../Data/data_3_unet/resized/'
+
+
+def resizeImage(resize_INPUT_PATH='', resized_path='', scalesize=0, save_file=False):
+	print 'doing resize'
+	# resize_INPUT_PATH = '../Test_Images/'
+	
+	dirs = os.listdir(resize_INPUT_PATH)
+	for item in dirs:
+		# print 'yes, path is correct'
+		if os.path.isfile(resize_INPUT_PATH + item):
+			# print 'yes, the folder contains files'
+			# item = 'hinten_ori1.jpg' #in case for specified  one image
+			im = Image.open(resize_INPUT_PATH + item)
+			w, h = im.size  # hy corrected order of w,h
+			print 'w,h:', w, ',', h
+			if w > h:
+				scalesize_b = scalesize
+				scalesize_a = int(scalesize * w / h)  # hy keep proportion
+			else:
+				scalesize_a = scalesize
+				scalesize_b = scalesize * int(h / w)
+			# fpath, fname = os.path.split(resize_INPUT_PATH + item)
+			fname = os.path.basename(resize_INPUT_PATH + item)
+			f_out = resized_path + fname[0:-4] + '_rz' + str(scalesize) + ImageType
+			print 'f_out', f_out
+			imResize = im.resize((scalesize_a, scalesize_b),
+			                     Image.BICUBIC)  # hy resize(w,h) corrected order. todo try bicubic, instead ANTIALIAS
+			if save_file:
+				imResize.save(f_out)  # hy: use this no restriction for image type, jpg,jpeg,png
+			# imResize.save(f_out, ImageType[1:], quality=90) #hy: image type do not include '.'
+	
+	if not os.listdir(resized_path):
+		print 'no file generated, check error'
+	
+	# img = img.resize((new_width, new_height), Image.ANTIALIAS)
+	# img.save('output image name.png')  # format may what u want ,*.png,*jpg,*.gif
+
+
+if resizeImage_ == 1:
+	resizeImage(resize_INPUT_PATH=resize_INPUT_PATH, resized_path=resized_path, scalesize=scalesize, save_file=False)
+
+
+def resizeCVimgTest(im, h, w):
+	basename = os.path.basename(im)
+	print basename
+	im = cv2.imread(im)
+	im = cv2.resize(np.uint8(im), (h, w))
+	cv2.imwrite('../Data/data_2/' + basename, im)
+
+
+# resizeCVimgTest('../tmp/distor_in/links_ww7.jpg',320,320)
+# frame_crop_resize_gray = imutils.resize(im, width=settings.w_resize)
+def resizeCVimg(im, h, w, fileame=None):
+	# basename = os.path.basename(im)
+	# print basename
+	im = cv2.resize(np.uint8(im), (h, w))
+	# cv2.imwrite('../Data/data_2/'+basename,im)
+	return im
+
+
+def augment_data_1_to_n(im, h, w, save_file=False):
+	name = os.path.basename(im)[:-len(ImageType)]
+	save_path = '../Test_Images/testpkg3_white_200x200/vorn/'
+	print 'augment data', name
+	im = cv2.imread(im)
+	im_proportions = []
+	ims_resize = []
+	
+	# first cut different proportion from whole image
+	def cutCVimg(im, ori_h, ori_w, ratio):
+		w = int(ori_w * ratio * 0.98)  # simulate different detection area sizes
+		# w = int(ori_w * ratio * 0.95)  # simulate different detection area sizes
+		h = int(ori_h * ratio)
+		im = im[ori_h - h:h, ori_w - w:w]  # y1:y2,x1:x2
+		return im
+	
+	for r in xrange(7, 9):
+		im = cutCVimg(im, im.shape[0], im.shape[1], r * 0.135)  # for rectangular use 0.12
+		im_proportions.append(im)
+		cv2.imshow('pro', im)
+		cv2.waitKey(10)
+	
+	# second, resize them to seg output size hxw
+	for im, i in zip(im_proportions, xrange(len(im_proportions))):
+		im = resizeCVimg(im, 320, 320)
+		ims_resize.append(im)
+		cv2.imshow('resize', im)
+		cv2.waitKey()
+		if save_file:
+			cv2.imwrite(save_path + name + '_135_' + str(i) + ImageType, im)
+	
+	# third, add all flipping
+	# for im in ims_resize:
+	for im, i in zip(ims_resize, xrange(len(ims_resize))):
+		for flipType in xrange(-1, 2):
+			im = cv2.flip(im, flipType)
+			filename = save_path + name + '_135_' + str(i) + '_flip' + str(flipType + 1) + ImageType
+			print 'filename', filename
+			cv2.imshow('flip' + str(i) + str(flipType + 1), im)
+			cv2.waitKey()
+			if save_file:
+				cv2.imwrite(filename, im)
+	
+	if save_file:
+		print '\nfiles are saved in', save_path
+
+
+if augment_data_1_to_n_ == 1:
+	augment_data_1_to_n('../Test_Images/testpkg3_white_200x200/vorn/vorn_whitebg1.jpg', 320, 320, save_file=False)
+
+#########################################################################
+if prepare_active_fields == 1:
+	print 'prepare active fields'
+	
+	crop_source_path = '../Test_Images/test_active_fields/'
+	crop_dest_path = '../Test_Images/test_active_fields/vorn/'  # MUST use label folder here to fit following sequence
+	
+	crop_method = 'random_dense'
+	# do_cropImg(crop_method=crop_method, crop_source_path=crop_source_path,crop_dest_path=crop_dest_path,stride=1)
+	
+	tmp_path = crop_source_path + 'tmp/'
+	cmd = 'mv ' + crop_dest_path + '*.jpg ' + tmp_path
+	# os.system(cmd)
+	
+	# resize
+	# resizeImg(resize_INPUT_PATH=crop2_source_path, resized_path=crop2_source_path,scalesize=400)
+	
+	# crop2_dest_path = crop_dest_path
+	# select an optimal image then crop
+	cropImage_none_overlap(crop2_source_path=tmp_path, crop2_dest_path=crop_dest_path, crop_opt='equal',
+	                       num_of_parts_per_row=4)
+
+
+#########################################################################
+
+########################################
+# import psutil as psutil
+# import time
+def display_im(im, slp_time=5):
+	im.show()
+	time.sleep(slp_time)
+	for proc in psutil.process_iter():
+		if proc.name() == "display":
+			proc.kill()
+
+
+########################################
+
+
+def resize_display_save(im, output_size, display, fpath, fname, save_file):
+	if im.size != output_size:
+		im.thumbnail(output_size, Image.ANTIALIAS)
+		print 'image size:', im.size
+
+	if display:
+		display_im(im)
+	if save_file:
+		if '.png' in fname:
+			import scipy.misc as misc
+			print 'save as grayscale'
+			misc.imsave(fpath+fname,im)
+		else:
+			im.save(fpath + fname)
+		print 'resized images are saved in', fpath
+
+
+########################################
+
+##################################################################################
+# hy: prepare training data for bg segmentation
+# added create_mul_class_mask, to use it a prepared mul-class bg image must be provided
+
+# change lila bg to other content
+def replace_lila(bgs=None, lilacad=None, fg=None, dest_path='', filename='', output_size=(0, 0), display=False,
+                 save_file=False):
+	item_bg = bgs[randint(0, len(bgs) - 1)]
+	
+	datas_bg = item_bg.convert("RGBA").getdata()
+	
+	datas_fg = fg.convert('RGBA').getdata()
+	
+	datas_CAD = lilacad.convert('RGBA').getdata()
+	
+	#####################################################################################################
+	newData = []
+	for data_obj, data_bg, data_fg in zip(datas_CAD, datas_bg, datas_fg):
+		if data_obj[0] >= 20 and data_obj[0] <= 106 and \
+										data_obj[1] >= 30 and data_obj[1] <= 116 and \
+										data_obj[2] >= 125 and data_obj[2] <= 245:
+			newData.append((data_bg[0], data_bg[1], data_bg[2]))
+		else:
+			newData.append(data_fg)
+	
+	item_bg.putdata(newData)
+	
+	# resize if necessary
+	if item_bg.size != output_size:
+		item_bg.thumbnail(output_size, Image.ANTIALIAS)  # an operation
+	print 'image size', item_bg.size
+	
+	if display:
+		display_im(item_bg)
+	
+	if save_file:
+		item_bg.save(dest_path + filename)
+		print 'files are saved in', dest_path
+	
+	
+	
+	# def crop_seg_img_mask_pair(img,mask,crop_method,crop_source,crop_dest_path,
+	#                          patch_size,patch_size_h,stride,crop_num,display=False,save_file=False):
+
+
+# crop a pair of image and its color mask or binary mask
+def crop_seg_img_mask_pair_1_to_n(display=False, save_file=False):
+	crop_size = 1000
+	path = '../tmp/resized/rest1/'
+	# im = [s for s in os.listdir(path) if '_im' in s]
+	im = [s for s in os.listdir(path) if 'crop1600' in s and '.jpg' in s
+	      and 'seg' not in s]
+	print 'im file', path + im[0]
+	img = Image.open(path + im[0])  # frame_crop1420_seg_color
+	m = [s for s in os.listdir(path) if 'crop1600' in s and '.jpg' in s
+	     and 'seg_m' in s and 'color' not in s]
+	print 'mask file', path + m[0]
+	mask = Image.open(path + m[0])
+	
+	print 'crop_path_fn', path + im[0]
+	imgsbox_, imgs_ = do_cropImg_1_to_n(crop_method='random_dense', crop_path_fn=path + im[0],
+	                                    crop_dest_path=crop_dest_path, \
+	                                    patch_size=crop_size, patch_size_h=crop_size, stride=1, crop_num=15,
+	                                    crop_left_patch=False, crop_right_patch=False, crop_center_patch=True,
+	                                    save_file=False)
+	
+	print 'imgbox len', len(imgsbox_)
+	mask_cropboxes, mask_crops = [], []
+	# select
+	start_index = 10
+	for i in xrange(start_index, start_index + min(10, len(imgsbox_))):
+		box_index = randint(0, len(imgsbox_) - 1)
+		
+		# crop with the corresponding box
+		mask_crop = mask.crop(imgsbox_[box_index])
+		# bg_mul_mask_.save('../tmp_mask.png')
+		mask_crops.append(mask_crop)
+		
+		output_size = (320, 320)
+		fpath = '../tmp/resized/'
+		bg_LABEL = 'desk'
+		fname = im[0][:-4]
+		resize_display_save(imgs_[box_index], output_size, display, fpath, fname + '_cam_im_' + bg_LABEL + '%03d.jpg' % i,
+		                    save_file)
+		resize_display_save(mask_crop, output_size, display, fpath, fname + '_cam_m_' + bg_LABEL + '%03d.png' % i,
+		                    save_file)
+
+
+if crop_seg_img_mask_pair_ == 1:
+	crop_seg_img_mask_pair_1_to_n(display=False, save_file=True)
+
+
+# crop_seg_img_mask_pair(im,mask,'random_dense',crop_desk_path,320,320,1,5,display=True,save_file=False)
+
+
+def check_mask_class_num():
+	a = '../Test_Images/MA/test_represent/masks_1c/'
+	h, w = 320, 320
+	# ims =sorted([s for s in os.listdir(a)])
+	ims = sorted([s for s in os.listdir(a)])
+
+	for im in ims:
+		ds = []
+		print '\n', im
+		use_Image_type = False
+		if use_Image_type:
+			picture = Image.open(a + im).convert('LA')
+			# picture.show()
+			datas = picture.getdata()
+			for data in datas:
+				for i in xrange(1):
+					# print 'data[%d]=%d'%(i,data[i])
+					if data[i] not in ds:
+						ds.append(data[i])
+		else:
+			import scipy.misc as misc
+			picture = misc.imread(a + im, 'I')
+			print picture
+			(h, w) = picture.shape
+			print w, h
+			for i in xrange(h):
+				for j in xrange(w):
+					if picture[i][j] not in ds:
+						ds.append(picture[i][j])
+		
+		print sorted(ds), '\ntotal classes in %s:%d' % (im, len(ds))
+
+
+if check_mask_class_num_ == 1:
+	check_mask_class_num()
+
+def collect_bg_list(path,dirs):
+	print 'len dirs:', len(dirs)
+	bg_list = []
+	for im in dirs:
+		# print 'path + im:', path + im
+		im = path + im
+		bg_list.append(im)
+		bg_list = sorted(bg_list)
+	return bg_list
+
+
+def get_min_size(_min_size, list_of_im_files):
+	for file in list_of_im_files:
+		w, h, c = cv2.imread(file).shape
+		min_im_size = min(w, h)
+		if min_im_size < _min_size:
+			_min_size = min_im_size
+	return _min_size
+
+
+def add_background_to_CAD_mul_mask(bg_color, fg_color, display=False, save_file=False):  # add_background
+	# http://tanbakuchi.com/posts/comparison-of-openv-interpolation-algorithms/
+	# cv2 resize: downsampling.interpolation=cv2.INTER_AREA upsampling interpolation=cv2.INTER_CUBIC
+
+	min_size = 8000
+	create_full_mul_color_mask = False
+	create_full_black_mask = False
+	DEBUG = True
+	CROP_BG_1_to_n = False
+	CROP_BG_1_to_1high = False #
+	CROP_BG_1_to_1norm = False #
+	NOT_CROP = True #use bg img after resize directly
+	NOT_CROP_Lila = True #use bg img after resize directly
+	use_each_bg_file = False
+
+	create_mul_class_mask = False  # switch between binary and mul-color-mask
+	start_index = 6  # start num is also filename index
+	num_of_files_to_create = 1
+	##############################################################################
+	# At least three types of images are needed:
+	# 1. one CAD training image prepared in violet bg, located in LILA_PATH
+	# 2. one background image, this can be a high resolution image or a patch from it,
+	#  in each case it can be chosen randomly,
+	# a prepared labelled mul-class bg img, located in bg_path
+	# 3. the corresponding mul-color-mask (located in bg_mul_label_path)
+	# to each bg image, the names of each pair of bg image and bg label must be same.
+	# They can be of different image formats, .jpg, .png
+	# They must be located in two different directories.
+	#
+	# bg_mask_color: is the color selected for lego image area in final training samples
+	# Each CAD sample will be merged into a randomly selected bg image
+	##############################################################################
+	
+	# ********************************************************************** #
+	# Collect images for bg and obj
+	# ********************************************************************** #
+
+	# bg_path = '../Data/data_3_segnet/mul_class/public/pub_selected_all/images/'
+	# bg_mul_label_path = '../Data/data_3_segnet/mul_class/public/pub_selected_all/labels/'
+	
+	#bg_path = PROJ_DIR +  '/haiyan_paperwork/red_selected/'
+	#bg_mul_label_path = PROJ_DIR +  '/haiyan_paperwork/red_selected_masks/'
+	
+	bg_path           = PROJ_DIR + 'MA/tmp/bg_MA_exp/5/'
+	if not create_mul_class_mask:
+		bg_mul_label_path = bg_path
+
+	LILA_PATH = '../tmp/CAD/1_CAD_tranLayer/' #mix: , oben:
+	#LILA_PATH = '../tmp/CAD/lila2/full/CAD_otherColors/'
+	CAD_lila_img_fs = []
+	dest_path = '../tmp/resized/rest2/'
+	dest_path_mul_blank = '../tmp/resized/rest5_mul/'
+	fn_prefix = 'cad_6c'
+	if NOT_CROP and NOT_CROP_Lila:
+		output_size = (360,360) #(320,320)#(350,350)#should not be larger than 350 because too slow
+		if DEBUG:
+			print 'output size:',output_size
+	else:
+		output_size = (320, 320)
+	
+	# choose one bg image from specified pool
+	# dirs_bg = os.listdir(bg_crop_source)
+	# collect bg img and or bg mul label files
+	if DEBUG:
+		print 'bg path:', bg_path
+	
+	based_on_serval_conditions = False
+	if based_on_serval_conditions:
+		# based on several conditions
+		dirs_bg1 = [s for s in os.listdir(bg_path) if 'jpg' in s and 'ADE_train_000048' in s]
+		dirs_bg2 = [s for s in os.listdir(bg_path) if 'jpg' in s and 'ADE_train_000051' in s]
+		dirs_bg3 = [s for s in os.listdir(bg_path) if 'jpg' in s and 'ADE_train_000061' in s]
+		# dirs_bg = dirs_bg1
+		dirs_bg = dirs_bg1 + dirs_bg2 + dirs_bg3
+		print 'len of bg ori list:', len(dirs_bg)
+		
+		bgs_ori = collect_bg_list(bg_path, dirs_bg) #return sorted list of path+im
+		
+		min_size = get_min_size(min_size, bgs_ori[0:10])  # can change this range
+		print 'bgs_ori num:', len(bgs_ori)
+		
+		# based on several conditions
+		dirs_bg1 = [s for s in os.listdir(bg_mul_label_path) if 'ADE_train_000048' in s]
+		dirs_bg2 = [s for s in os.listdir(bg_mul_label_path) if 'ADE_train_000051' in s]
+		dirs_bg3 = [s for s in os.listdir(bg_mul_label_path) if 'ADE_train_000061' in s]
+		# dirs_bg = dirs_bg1
+		dirs_bg = dirs_bg1 + dirs_bg2 + dirs_bg3
+	
+	else:
+		dirs_bg = [s for s in os.listdir(bg_path) if '_rz' in s] #the extra condition must always be the same for im and mask below
+		print 'len of bg ori list:', len(dirs_bg)
+		bgs_ori = collect_bg_list(bg_path, dirs_bg) #return sorted list of path+im
+		print 'bgs_ori num:', len(bgs_ori)
+		
+	dirs_mul_mask = [s for s in os.listdir(bg_mul_label_path) if '_rz' in s] #the extra condition must always be the same as above for im
+
+	if len(bgs_ori) != len(dirs_mul_mask):
+		print 'check path for mask files'
+		print 'bgs_mul_label_ori num:', len(dirs_mul_mask)
+		
+	else:
+		bgs_mul_mask_files = collect_bg_list(bg_mul_label_path, dirs_mul_mask)
+
+	# or shorter,
+	if bg_mul_label_path == bg_path:
+		use_shorter_list = False #set true for pub bg
+	else:
+		use_shorter_list = True #set true for pub bg
+
+	if use_shorter_list:
+		#bgs_ori , bgs_mul_mask_files = bgs_ori[715:1000],  bgs_mul_mask_files[715:1000] #mul class
+		bgs_ori , bgs_mul_mask_files = bgs_ori[2:280],  bgs_mul_mask_files[231:330]  #bin class
+		#print 'bgs files:',bgs_ori, '\nmasks files:',bgs_mul_mask_files
+	
+	
+	# get lila_with_obj images
+	lila_base = [s for s in os.listdir(LILA_PATH) if 'veri' in s and 'hinten' in s ] #if 'mul' in s or 'perpendi' in s]
+	#lila_base = [s for s in os.listdir(LILA_PATH) if 'oben' not in s and 'unten' not in s and 'mix' not in s]
+	if DEBUG:
+		print 'lila_base num_mul:', len(lila_base)
+	
+	for lila in lila_base:  # obj with lila bg colour
+		CAD_lila_img_f = LILA_PATH + lila
+		CAD_lila_img_fs.append(CAD_lila_img_f)
+	
+	# use get_min_size or manually set
+	min_size = get_min_size(min_size, CAD_lila_img_fs)
+
+	if DEBUG:
+		print 'add background'
+		print 'prepare background images by cropping one image'
+	crop_dest_path = '../tmp/resized/rest4/'
+	# crop_size = min(500, min_size)  # set min_size to avoid out of range, 500 for l
+	crop_size = 350  # for pub data in smaller image size,
+	# The smaller the crop_size the bigger region of the obj in result image
+	if DEBUG:
+		if not NOT_CROP:
+			print 'crop_size', crop_size
+	
+	# ********************************************************************** #
+	# merge bg and obj
+	# ********************************************************************** #
+	bgsbox, bgs = [], []
+	bgs_labeled_mask = []
+	# can randomly select or
+	# manually
+	#bgs_ori = bgs_ori[1001:2571]
+	#num_to_generate = min(len(bgs_ori),len(lila_base))
+	#or manually
+	num_of_files_to_create = min(len(bgs_ori),num_of_files_to_create)
+	print 'num_to_generate:', num_of_files_to_create
+	for num in xrange(num_of_files_to_create):
+		# for num in xrange(min(4, len(bgs_ori))):
+		# file_index = randint(0, len(bgs_ori) - 1)
+		if use_each_bg_file:
+			file_index = num-1
+		else:
+			file_index = randint(0, len(bgs_ori) - 1)
+		
+		bg_path_name = bgs_ori[file_index]
+		
+		# crop_num can be used to define the size of final bg image pool
+		# bg images are cropped from one big picture containing bg
+		# change option in crop_random_dense to get desired region of bg
+		if DEBUG:
+			print 'crop_path_fn', bg_path_name
+
+		if NOT_CROP:
+			#for the case the bg img is already in output size
+			do_resize = True #for larger image recommended to resize
+			if do_resize:
+				#convert cv2 to PIL
+				bg = cv2.resize(cv2.imread(bg_path_name), output_size,interpolation=cv2.INTER_AREA)
+				bg_cv2 = cv2.cvtColor(bg, cv2.COLOR_BGR2RGB)
+				bg_ = Image.fromarray(bg_cv2)
+
+				
+				#cv2.imwrite(bg_path_name, bg)
+				bg_mul_mask_source = bgs_mul_mask_files[file_index]
+				bg_mask_im = cv2.resize(cv2.imread(bg_mul_mask_source), output_size,interpolation=cv2.INTER_AREA)
+				bg_mask_cv2 = cv2.cvtColor(bg_mask_im, cv2.COLOR_BGR2RGB)
+				#cv2.imwrite(bg_mul_mask_source, bg_mask_im)
+				bg_mask_im_ = Image.fromarray(bg_mask_cv2)
+			else:
+				bg_ = Image.open(bg_path_name)
+				bg_ = bg_.crop((30, 30, 30 + crop_size, 30 + crop_size))
+				bg_mul_mask_source = bgs_mul_mask_files[file_index]
+				bg_mask_im_ = Image.open(bg_mul_mask_source)
+				#bg_mask_im_.show(30, 30, 30 + crop_size, 30 + crop_size)
+			
+			bgs.append(bg_)
+			bgs_labeled_mask.append(bg_mask_im_)
+
+		if CROP_BG_1_to_n:
+			bgsbox_, bgs_ = do_cropImg_1_to_n(crop_method='random_dense', crop_path_fn=bg_path_name,
+											  crop_dest_path=crop_dest_path, \
+											  patch_size=crop_size, patch_size_h=crop_size, stride=1, crop_num=2,
+											  crop_left_patch=True, crop_right_patch=True, crop_center_patch=True,
+											  save_file=False)
+
+			num_crops = len(bgsbox_)
+			if num_crops > 0:
+				for num_bg in xrange(num_crops):
+					box_index = randint(0, num_crops - 1)
+					bgsbox.append(bgsbox_[box_index])
+					bgs.append(bgs_[box_index])
+
+					# open the corresponding prepared mask
+					bg_mul_mask_source = bgs_mul_mask_files[file_index]
+					#filename,ext = os.path.splitext(bg_mul_mask_source)
+					#ori_mask_in_png = True
+					#if ori_mask_in_png:
+					#bg_mul_mask_source = bg_mul_mask_source[:-4] + ext
+					#if DEBUG:
+					#	print 'bg_mul_mask_source:', bg_mul_mask_source
+
+
+					bg_mask_im = Image.open(bg_mul_mask_source)
+
+					# crop with the corresponding box
+					bg_mask_ = bg_mask_im.crop(bgsbox_[box_index])
+					bgs_labeled_mask.append(bg_mask_)
+		if CROP_BG_1_to_1high:
+			bg = cv2.resize(cv2.imread(bg_path_name), (crop_size+180, crop_size+180))
+			cv2.imwrite(bg_path_name, bg)
+			bg = Image.open(bg_path_name)
+			bbox = (30, 30, 30 + crop_size, 30 + crop_size)
+			#bg_ = bbox = (x * stride, y * stride, x * stride + patch_size, y * stride + patch_size_h)
+			bg_ = bg.crop(bbox)
+
+			bgs.append(bg_)
+
+			bg_mul_mask_source = bgs_mul_mask_files[file_index]
+
+			bg_mask_im = cv2.resize(cv2.imread(bg_mul_mask_source), (crop_size+100, crop_size+100))
+			cv2.imwrite(bg_mul_mask_source, bg_mask_im)
+			bg_mask_im_ = Image.open(bg_mul_mask_source)
+
+			bgs_labeled_mask.append(bg_mask_im_)
+
+
+		if CROP_BG_1_to_1norm:
+			bg = cv2.resize(cv2.imread(bg_path_name),(crop_size,crop_size))
+			cv2.imwrite(bg_path_name,bg)
+			bg_ = Image.open(bg_path_name)
+
+			bgs.append(bg_)
+
+			bg_mul_mask_source = bgs_mul_mask_files[file_index]
+			#ori_mask_in_png = True
+			#if ori_mask_in_png:
+			#	bg_mul_mask_source = bg_mul_mask_source[:-3] + 'png'
+			#	if DEBUG:
+			#		print 'bg_mul_mask_source:', bg_mul_mask_source
+
+			bg_mask_im = cv2.resize(cv2.imread(bg_mul_mask_source), (crop_size, crop_size))
+			cv2.imwrite(bg_mul_mask_source, bg_mask_im)
+			bg_mask_im_ = Image.open(bg_mul_mask_source)
+
+			bgs_labeled_mask.append(bg_mask_im_)
+
+		if create_full_black_mask:
+			#start_index = 121
+			# end_index = min(len(bgsbox), 20)
+			#end_index = 60
+			full_bg_im = Image.open(bg_path_name)
+			i = start_index + num
+			resize_display_save(full_bg_im, output_size, display, dest_path, fn_prefix + '_im_' + '%03d.jpg' % i,
+								save_file)
+			blank_im = Image.new("RGB", output_size, bg_color)  ## default black!
+			resize_display_save(blank_im, output_size, display, dest_path,
+									fn_prefix + '_m_' + '%03d.png' % i, save_file)
+
+			#blank_im.save(dest_path + fn_prefix + '_m_' + '%03d.png' % m)
+
+	# with returned info of bounding box to create the corresponding crop from the original bg image
+	if DEBUG:
+		print 'bgs len', len(bgs), 'bgsbox len', len(bgsbox)
+	
+	border_s = 0  # i.e. smaller area for bg
+	border_l = 0
+	border_remain = 0
+	if NOT_CROP and NOT_CROP_Lila:
+		border_remain = 1
+	
+	#start_index = int(len([s for s in os.listdir(dest_path)]) / 2) + 1
+	#start_index = 45  # start num is also filename index
+	if CROP_BG_1_to_n:
+		condition = bgsbox
+	else:
+		condition = bgs
+	#num_of_files_to_create = 3
+	end_index = min(len(condition), num_of_files_to_create) #700-1000=300 500  510-210 300 - 80 220
+
+	#crop_ratio = randint(4950, 5900) * 0.0001  # the smaller the ratio the smaller obj in merged img
+	#crop_ratio_list = \
+	#	[randint(3575, 5575) * 0.0001, randint(3975, 4575) * 0.0001, randint(5875, 6675) * 0.0001,
+	#	 randint(4875, 5675) * 0.0001, randint(4950, 5900) * 0.0001, randint(3075, 4575) * 0.0001]
+	crop_ratio_list = \
+		[randint(7575, 9575) * 0.0001, randint(8975, 9575) * 0.0001, randint(5875, 6675) * 0.0001,
+	 randint(4875, 5675) * 0.0001, randint(4950, 5900) * 0.0001, randint(3075, 4575) * 0.0001]
+	
+	# for CAD_lila_img_f, i in zip(CAD_lila_img_fs,xrange(start_index, start_index + 1)):
+	for i in xrange(start_index, start_index + end_index):
+		LILA_IN_ORDER = False
+		if LILA_IN_ORDER:
+			#if i - start_index > len(lila_base):
+			CAD_lila_index = (i - start_index)% len(lila_base)
+
+		else:
+			CAD_lila_index = randint(0, len(CAD_lila_img_fs) - 1)
+
+		BG_IN_ORDER = False
+		if BG_IN_ORDER:
+			bg_index = i - start_index
+		else:
+			bg_index = randint(0, len(bgs) - 1)
+			
+		# bg_index = bgs[5]
+		if DEBUG:
+			print '\nCAD_lila index', CAD_lila_index
+			print 'bg index', bg_index
+
+		crop_ratio_index = randint(0, len(crop_ratio_list) - 1)
+		crop_ratio = crop_ratio_list[crop_ratio_index]
+
+		CAD_lila_img_f = CAD_lila_img_fs[CAD_lila_index]
+		bg_input = bgs[bg_index]  # merge part one
+
+		CREATE_for_Perpendi_Images = True
+		if CREATE_for_Perpendi_Images:
+			if 'unten' in CAD_lila_img_f and 'perpendi' in CAD_lila_img_f:
+				fg_color = (160, 160, 160)
+			if 'oben' in CAD_lila_img_f and 'perpendi' in CAD_lila_img_f:
+				fg_color = (180, 180, 180)
+			if 'vorn' in CAD_lila_img_f and 'perpendi' in CAD_lila_img_f:
+				fg_color = (200, 200, 200)
+			if 'hinten' in CAD_lila_img_f and 'perpendi' in CAD_lila_img_f:
+				fg_color = (220, 220, 220)
+			if 'links' in CAD_lila_img_f or 'rechts' in CAD_lila_img_f:
+				fg_color = (240, 240, 240)
+
+
+		merged_im = bg_input.copy()
+		merged_im.thumbnail(output_size, Image.ANTIALIAS)
+		#if DEBUG:
+		#	merged_im.show()
+
+		# if create_mul_class_mask:
+		# apply obtained random bounding box to the prepared mul-color-mask image to
+		# get the corresponding cropping
+		# if create_mul_class_mask:
+		#	bg_mul_mask_ori = bgs_labeled_mask[bg_index]
+		# bg_mul_mask_ori = bg_mul_mask.crop(bgsbox[bg_index])
+		
+		#	obj_w_bg_mul_mask = bg_mul_mask_ori.copy()  # obj_w_bg_mul_mask
+		
+		#####################################################################################################
+		if border_s == 1:
+			# for vorn and hinten, Crop center part of the CAD image with lila background, get square form
+			# CAD image with lila background
+			CAD_lila_imgs = crop_center(f_img=CAD_lila_img_f, stride=1, crop_num=1, crop_w=crop_size, crop_h=crop_size,
+			                            crop_dest_path=crop_dest_path,
+			                            patch_size=crop_size, save_file=False)
+			CAD_lila = CAD_lila_imgs[0]
+			CAD_lila.thumbnail(output_size, Image.ANTIALIAS)
+			# print 's: check new im size:', new_im.size
+			
+			if display:
+				display_im(CAD_lila)
+		
+		#####################################################################################################
+		if border_l == 1:
+			# for others, resize CAD_lila and put it to a larger lila bg
+			use_cv2 = True
+			if use_cv2:
+				CAD_lila_img_rz = cv2.imread(CAD_lila_img_f)
+				CAD_lila_img_rz = cv2.resize(CAD_lila_img_rz, (output_size))
+				cv2.imwrite('../tmp/tmp.png', CAD_lila_img_rz)
+				CAD_lila_img_rz = Image.open('../tmp/tmp.png').convert('RGB')
+			else:
+				CAD_lila_img_rz = Image.open(CAD_lila_img_f)
+			w, h = CAD_lila_img_rz.size
+			if DEBUG:
+				print 'CAD_lila_img_f:', CAD_lila_img_f
+				print '***** crop w,h:', w, h, ', h/w', h / w  # 320 * 0.9875 = 316
+
+
+			obj_size_w = int(crop_size * crop_ratio)
+			# obj_size_w = int(crop_size * 0.9875)
+			# print 'define obj width in new im:',obj_size_w
+			
+			#old_size = (obj_size_w, int(obj_size_w * h / w))  # (316,172)
+			#use random ratio for height as well
+			rnd_h_ratio = 0.1 * randint(8,29)
+			old_size = (obj_size_w, int(obj_size_w * h / w * rnd_h_ratio ))  # (316,172)
+			print 'rnd_h_ratio: ', rnd_h_ratio
+			CAD_lila_img_rz.thumbnail(old_size, Image.ANTIALIAS)  # an operation
+			
+			# print 'check obj size in new im:', CAD_lila_img_rz.size
+			
+			new_size = (output_size[0], output_size[1])
+			
+			CAD_lila = Image.new('RGB', new_size, (80, 80, 192))
+			
+			CAD_lila.paste(CAD_lila_img_rz, (int((new_size[0] - old_size[0]) / 2),
+			                                int((new_size[1] - old_size[1]) / 2)))
+		if border_remain == 1:
+			use_cv2 = True
+			if use_cv2:
+				CAD_lila = cv2.imread(CAD_lila_img_f)
+				CAD_lila = cv2.resize(CAD_lila,(output_size),interpolation=cv2.INTER_AREA)
+				#convert to PIL
+				CAD_lila_cv2 = cv2.cvtColor(CAD_lila, cv2.COLOR_BGR2RGB)
+				CAD_lila = Image.fromarray(CAD_lila_cv2)
+				
+				#cv2.imwrite('../tmp/tmp.png',CAD_lila)
+				#CAD_lila = Image.open('../tmp/tmp.png').convert('RGB')
+			else:
+				CAD_lila = Image.open(CAD_lila_img_f).convert('RGB')
+				CAD_lila.thumbnail(output_size, Image.ANTIALIAS)
+			
+			if display:
+				display_im(CAD_lila)
+				
+				
+		# img = Image.fromarray(new_im, 'RGB')
+		#####################################################################################################
+		
+		#########################################################################################################
+
+		bg_mul_mask_ori = bgs_labeled_mask[bg_index]  # marge part one for mul class mask
+		print 'bg_mul_mask_ori size', bg_mul_mask_ori.size
+		bg_mul_mask_rz = bg_mul_mask_ori.copy()  # marge part one for mul class mask
+		bg_mul_mask_rz.thumbnail(output_size,Image.ANTIALIAS)
+		###########################
+		#bg_color, fg_color = (0, 0, 0), (255, 255, 255)
+
+		merged_m = CAD_lila.copy()
+
+		# replace lila region with bg
+		# for data_obj, data_bg, data_bg_mul_mask in zip(datas_CAD, datas_bg, datas_bg_mul_mask):
+		index = 0
+		if not create_full_black_mask:
+			for y in xrange(output_size[1]):
+				for x in xrange(output_size[0]):
+					bg_mul_mask_pixel = bg_mul_mask_rz.getpixel((x, y))
+					CAD_lila_pixel = CAD_lila.getpixel((x, y))
+					CAD_datas = CAD_lila.convert('RGBA').getdata()
+					# **************************************************************************
+					# when creating mul-color-mask, the bg is the prepared mul-color-mask, this mask
+					# must also be fed with corresponding obj area:
+					# **************************************************************************
+					data_obj = CAD_datas[index]
+					index += 1
+					if data_obj[0] >= 20 and data_obj[0] <= 106 and \
+															data_obj[1] >= 30 and data_obj[1] <= 116 and \
+															data_obj[2] >= 125 and data_obj[2] <= 245:
+						# by default, fill the lila region with bg content
+						# replace lila region with prepared mul-color-mask
+					#if CAD_lila_pixel == (80, 80, 192):
+						if create_mul_class_mask:
+							merged_m.putpixel((x, y), bg_mul_mask_pixel)
+						else:
+							merged_m.putpixel((x, y), bg_color)
+					else:
+						merged_im.putpixel((x, y), CAD_lila_pixel)
+						merged_m.putpixel((x, y), fg_color)
+
+		###########################
+			resize_display_save(merged_im, output_size, display, dest_path, fn_prefix + '_im_' + '%03d.jpg' % i,
+								save_file)
+			resize_display_save(merged_m, output_size, display, dest_path, fn_prefix + '_m_' + '%03d.png' % i,
+								save_file)
+
+
+		# similar to full black mask for binary data, here we can also create full
+		# color mask for the case no obj of interest in the image
+		#create_full_mul_color_mask = True
+		if create_full_mul_color_mask:
+			resize_display_save(bg_input, output_size, display, dest_path_mul_blank, fn_prefix + '_f_im_' + '%03d.png' % i,
+			                    save_file)
+			resize_display_save(bg_mul_mask_rz, output_size, display, dest_path_mul_blank,
+			                    fn_prefix + '_f_m_' + '%03d.png' % i, save_file)
+			###########################
+
+if add_background_to_CAD_mul_mas == 1:
+	add_background_to_CAD_mul_mask(bg_color=(0, 0, 0), fg_color=(200,200,200), display=False, save_file=True)
+
+
+
+##################################################################################
+# paste one CAD in random size and pose to this bg
+def paste_1_obj_to_base(cad, base, size_factor=1, posx=0, posy=0, display=False):
+	cad = crop_roi(cad, display=False)  # in crop_roi the specified background is violet color region
+	w, h = cad.size
+	obj_size_w = int(w * size_factor)
+	old_size = (obj_size_w, int(obj_size_w * h / w))
+	
+	cad.thumbnail(old_size, Image.ANTIALIAS)
+	
+	# adjust position of the cad object
+	base.paste(cad, (int((base.size[0] - old_size[0]) * posx), int((base.size[1] - old_size[1]) * posy)), cad)
+	
+	if display:
+		display_im(base)
+	return base
+
+
+# non-lila region will be added as overlay
+# use it to prepare multiple objects in one image, the objects can be overlapped
+def add_overlay_roi(bgs=None, bottom=None, overlay=None, dest_path='', filename='', output_size=(0, 0), display=False,
+                    save_file=False):
+	if len(bgs) > 0:
+		obj_with_bg = bgs[randint(0, len(bgs) - 1)]
+	elif len(bgs) == 0:
+		print 'no bg image'
+	else:
+		obj_with_bg = bgs[0]
+	datas_bg = obj_with_bg.convert("RGBA").getdata()
+	
+	datas_overlay = overlay.convert('RGBA').getdata()
+	
+	datas_bottom = bottom.convert('RGBA').getdata()
+	#####################################################################################################
+	newData = []
+	# for data_bottom, data_overlay in zip(datas_bottom, datas_overlay):
+	for data_bottom, data_lila_bg, data_overlay in zip(datas_bottom, datas_bg, datas_overlay):
+		cond_lila_bg = data_lila_bg[0] >= 20 and data_lila_bg[0] <= 106 and \
+		               data_lila_bg[1] >= 30 and data_lila_bg[1] <= 116 and \
+		               data_lila_bg[2] >= 125 and data_lila_bg[2] <= 245
+		cond_bottom = data_bottom[0] >= 20 and data_bottom[0] <= 106 and \
+		              data_bottom[1] >= 30 and data_bottom[1] <= 116 and \
+		              data_bottom[2] >= 125 and data_bottom[2] <= 245
+		cond_overlay = data_overlay[0] >= 20 and data_overlay[0] <= 106 and \
+		               data_overlay[1] >= 30 and data_overlay[1] <= 116 and \
+		               data_overlay[2] >= 125 and data_overlay[2] <= 245
+		
+		if not cond_overlay:
+			newData.append((data_overlay[0], data_overlay[1], data_overlay[2]))
+		
+		elif not cond_bottom:
+			newData.append((data_bottom[0], data_bottom[1], data_bottom[2]))
+		
+		else:
+			# cond_lila_bg and cond_bottom:
+			newData.append((data_lila_bg[0], data_lila_bg[1], data_lila_bg[2]))
+	
+	obj_with_bg.putdata(newData)
+	
+	# resize if necessary
+	if obj_with_bg.size != output_size:
+		obj_with_bg.thumbnail(output_size, Image.ANTIALIAS)  # an operation
+	print 'image size', obj_with_bg.size
+	
+	if display:
+		display_im(obj_with_bg)
+	
+	if save_file:
+		obj_with_bg.save(dest_path + filename)
+		print 'files are saved in', dest_path
+	
+	return obj_with_bg
+
+
+def put_objects_n_in_1_lila(display=False, save_file=False):
+	crop_size = 1280
+	#obj_path = '../tmp/cam/cam_lila/'  # image contains object with lila bg
+	obj_path = '../tmp/CAD/lila2/full/mul_in_2_right_position_no_transp_png/' # image contains object with lila bg
+	# dest_path = '../tmp/CAD/lila2/full/mul_in_1/'
+	dest_path = '../tmp/resized/rest1/'
+	dirs = os.listdir(obj_path)
+	dirs = [s for s in dirs if 'oben' not in s and 'all' not in s]
+	# dirs = [s for s in dirs if 'unten' in s and '.jpg' in s]
+	ims = []
+	for im in dirs:
+		#print 'ims', im
+		im = Image.open(obj_path + im).convert('RGBA')
+		ims.append(im)
+	ims = ims[0:]
+	print dirs[0:0+6]
+	
+	# create a large lila image as bg
+	base_size = (2080, 2080)
+	base_empty_lilas, bgs = [], []
+	for i in xrange(len(ims)):
+		base_lila = Image.new("RGBA", base_size, (80, 80, 192))  ## add color, RGBA-transp
+		base_empty_lilas.append(base_lila)  # prepare empty lila base as many as num of objects
+		bgs = base_empty_lilas
+	
+	# combined_im = base_empty_lilas[0]
+	
+	# here different transformations can be applied before feeding to base image
+	# ims[0] = ims[0].transpose(Image.FLIP_LEFT_RIGHT)
+	ims[0] = ims[0].rotate(-6, expand=1)
+	ims[2] = ims[2].rotate(-3, expand=1)
+	ims[1] = ims[1].transpose(Image.FLIP_LEFT_RIGHT)
+	ims[3] = ims[3].rotate(16, expand=1)
+	#ims[4] = ims[4].rotate(-16, expand=1)
+
+	layout = 4  # layout: 1,2,3,  4-non_overlap
+	if layout == 4:
+		ims[0] = ims[0].rotate(-6, expand=1)
+		ims[2] = ims[2].rotate(-3, expand=1)
+		ims[1] = ims[1].transpose(Image.FLIP_LEFT_RIGHT)
+		ims[3] = ims[3].rotate(16, expand=1)
+
+	if layout == 1:
+		base_lila1 = paste_1_obj_to_base(ims[0], base_empty_lilas[0], size_factor=0.575, posx=0.01, posy=0.9, display=False)
+		
+		# add second obj into base, assign to base_lila2
+		base_lila2 = paste_1_obj_to_base(ims[1], base_empty_lilas[1], size_factor=0.6075, posx=0.9, posy=0.01,
+		                                 display=False)
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=base_lila1, overlay=base_lila2, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add third obj into base, assign to base_lila3
+		base_lila3 = paste_1_obj_to_base(ims[2], base_empty_lilas[2], size_factor=0.5875, posx=0.91, posy=0.4,
+		                                 display=False)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila3, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add 4th obj into base, assign to base_lila4
+		base_lila4 = paste_1_obj_to_base(ims[3], base_empty_lilas[3], size_factor=0.5875, posx=0.2, posy=0.8,
+		                                 display=True)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila4, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add 5th obj into base, assign to base_lila5
+		base_lila5 = paste_1_obj_to_base(ims[4], base_empty_lilas[4], size_factor=0.5875, posx=0.6, posy=0.9,
+		                                 display=True)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila5, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+	
+	# multiple cad images can be pasted into the base image one by one
+	if layout == 2:
+		# add first obj into base, assign to base_lila1
+		base_lila1 = paste_1_obj_to_base(ims[0], base_empty_lilas[0], size_factor=0.575, posx=0.95, posy=0.4, display=False)
+		
+		# add second obj into base, assign to base_lila2
+		base_lila2 = paste_1_obj_to_base(ims[1], base_empty_lilas[1], size_factor=0.6875, posx=0.9, posy=0.01,
+		                                 display=False)
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=base_lila1, overlay=base_lila2, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add third obj into base, assign to base_lila3
+		base_lila3 = paste_1_obj_to_base(ims[2], base_empty_lilas[2], size_factor=0.5875, posx=0.01, posy=0.9,
+		                                 display=False)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila3, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add 4th obj into base, assign to base_lila4
+		base_lila4 = paste_1_obj_to_base(ims[3], base_empty_lilas[3], size_factor=0.5875, posx=0.2, posy=0.8,
+		                                 display=False)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila4, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add 5th obj into base, assign to base_lila5
+		base_lila5 = paste_1_obj_to_base(ims[4], base_empty_lilas[4], size_factor=0.5875, posx=0.6, posy=0.9,
+		                                 display=False)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila5, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+	
+	##########################################################################################################
+	
+	# multiple cad images can be pasted into the base image one by one
+	if layout == 3:
+		# add first obj into base, assign to base_lila1
+		base_lila1 = paste_1_obj_to_base(ims[0], base_empty_lilas[0], size_factor=0.575, posx=0.05, posy=0.4, display=False)
+		
+		# add second obj into base, assign to base_lila2
+		base_lila2 = paste_1_obj_to_base(ims[1], base_empty_lilas[1], size_factor=0.6875, posx=0.09, posy=0.01,
+		                                 display=False)
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=base_lila1, overlay=base_lila2, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add third obj into base, assign to base_lila3
+		base_lila3 = paste_1_obj_to_base(ims[2], base_empty_lilas[2], size_factor=0.5875, posx=0.01, posy=0.9,
+		                                 display=False)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila3, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add 4th obj into base, assign to base_lila4
+		base_lila4 = paste_1_obj_to_base(ims[3], base_empty_lilas[3], size_factor=0.5875, posx=0.7, posy=0.8,
+		                                 display=False)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila4, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add 5th obj into base, assign to base_lila5
+		base_lila5 = paste_1_obj_to_base(ims[4], base_empty_lilas[4], size_factor=0.5875, posx=0.6, posy=0.9,
+		                                 display=False)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila5, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+	
+	# non_overlap
+	if layout == 4:
+		# add first obj into base, assign to base_lila1
+		base_lila1 = paste_1_obj_to_base(ims[0], base_empty_lilas[0], size_factor=0.575, posx=0.05, posy=0.4, display=False)
+		
+		# add second obj into base, assign to base_lila2
+		base_lila2 = paste_1_obj_to_base(ims[1], base_empty_lilas[1], size_factor=0.6875, posx=0.09, posy=0.01,
+		                                 display=False)
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=base_lila1, overlay=base_lila2, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add third obj into base, assign to base_lila3
+		base_lila3 = paste_1_obj_to_base(ims[2], base_empty_lilas[2], size_factor=0.5875, posx=0.01, posy=0.9,
+		                                 display=False)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila3, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		
+		# add 4th obj into base, assign to base_lila4
+		base_lila4 = paste_1_obj_to_base(ims[3], base_empty_lilas[3], size_factor=0.5875, posx=0.75, posy=0.5,
+		                                 display=False)  # pos: left bottom use x0.01,y0.9
+		overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila4, dest_path='', filename='',
+		                                output_size=base_size, display=False, save_file=False)
+		# add 5th obj into base, assign to base_lila5
+		#base_lila5 = paste_1_obj_to_base(ims[4], base_empty_lilas[4], size_factor=0.5875, posx=0.65, posy=0.9,
+		 #                                display=False)  # pos: left bottom use x0.01,y0.9
+		#overlay_added = add_overlay_roi(bgs=bgs, bottom=overlay_added, overlay=base_lila5, dest_path='', filename='',
+		 #                               output_size=base_size, display=False, save_file=False)
+
+	# base_lila.show()
+	# base_lila = paste_1_cad_to_base(ims[2], base_lila, 0.5775, 0.5, 0.87, display=display)
+	
+	
+	# resize to suitable size for seg model
+	overlay_added.thumbnail((crop_size, crop_size), Image.ANTIALIAS)
+	
+	if display:
+		display_im(overlay_added, slp_time=0)
+	if save_file:
+		filename = 'cad' + '_mix_lila18' + '.png'
+		overlay_added.save(dest_path + filename)
+		print filename, 'is saved in', dest_path
+
+
+if put_objects_n_in_1_lila_ == 1:
+	put_objects_n_in_1_lila(display=False, save_file=True)
+
+
+# change black bg to other color
+def replace_black(new_color, display=False, save_file=False):
+	file_path = '../tmp//distor_in/'
+	dest_path = '../tmp/resized/rest2/'
+	
+	file_path = '../Data/data_3_segnet/mul_class/tree11/labels_tmp/'
+	dest_path = '../Data/data_3_segnet/mul_class/tree11/labels_tmp/'
+	dir = os.listdir(file_path)
+	for item in dir:
+		fn = os.path.basename(item)
+		im = Image.open(file_path + item)
+		# new_size_w,new_size_h = (320,320)
+		new_size_w, new_size_h = im.size
+		print 'new size', new_size_w, new_size_h
+		# for others, resize CAD_lila
+		im.thumbnail((new_size_w, new_size_h), Image.ANTIALIAS)  # an operation
+		new_im = Image.new("RGB", (new_size_w, new_size_h), new_color)  ## default black!
+		
+		# new_im.paste((255, 255, 255), (0, 0, new_size_w, new_size_h))  ##
+		
+		CAD_lila_img = im.convert("RGBA")
+		datas_CAD = CAD_lila_img.getdata()
+		
+		#####################################################################################################
+		item_bg = new_im.convert("RGBA")
+		datas_bg = item_bg.getdata()
+		
+		newData = []
+		count = 0
+		for data_obj, data_bg in zip(datas_CAD, datas_bg):
+			if count < 749:
+				#print data_obj[0], data_obj[1], data_obj[2]
+				count += 1
+				
+			#condition 1
+			use_cond_1 = False
+			if use_cond_1:
+				if data_obj[0] >= 0 and data_obj[0] <= 254 and \
+												data_obj[1] >= 0 and data_obj[1] <= 254 and \
+												data_obj[2] >= 0 and data_obj[2] <= 254:
+					newData.append((data_bg[0], data_bg[1], data_bg[2]))
+				else:
+					newData.append(data_obj)
+
+			use_cond_2 = True
+			if use_cond_2: # replace green to new_color
+				if data_obj[0] >= 0 and data_obj[0] <= 185 and \
+												data_obj[1] >= 0 and data_obj[1] <= 255 and \
+												data_obj[2] >= 0 and data_obj[2] <= 185:
+					newData.append((data_bg[0], data_bg[1], data_bg[2]))
+				else:
+					newData.append(data_obj)
+			
+		item_bg.putdata(newData)
+		
+		if display:
+			display_im(item_bg)
+		
+		if save_file:
+			item_bg.save(dest_path + fn)
+			print 'files are saved in', dest_path
+
+if replace_black_ == 1:
+	replace_black(new_color=(0, 0, 0), display=False, save_file=True)
+
+
+# change white to other color
+def replace_white(new_color, display=False, save_file=False):
+	file_path = '../Data/data_3_segnet/mul_class/MA_real/training/3masks_mul/'
+	dest_path = '../Data/data_3_segnet/mul_class/MA_real/training/3mula_masks_pre/'
+	dirs = os.listdir(file_path)
+	#dirs = dirs[0:1]
+	print 'dir:', dirs
+	for item in dirs:
+		#print 'item:', item
+		fn = os.path.basename(item)
+		im = Image.open(file_path + item)
+		# new_size_w,new_size_h = (320,320)
+		new_size_w, new_size_h = im.size
+		print 'new size', new_size_w, new_size_h
+		# for others, resize CAD_lila
+		im.thumbnail((new_size_w, new_size_h), Image.ANTIALIAS)  # an operation
+		new_im = Image.new("RGB", (new_size_w, new_size_h), new_color)  ## default black!
+		
+		# new_im.paste((255, 255, 255), (0, 0, new_size_w, new_size_h))  ##
+		
+		old_img = im.convert("RGBA")
+		datas_old = old_img.getdata()
+		
+		#####################################################################################################
+		new_item = new_im.convert("RGBA")
+		datas_new = new_item.getdata()
+		
+		newData = []
+		for data_obj, data_bg in zip(datas_old, datas_new):
+			if data_obj[0] == 255  and data_obj[1] == 255 and data_obj[2] == 255:
+				newData.append((data_bg[0], data_bg[1], data_bg[2]))
+			else:
+				newData.append(data_obj)
+				
+		new_item.putdata(newData)
+		
+		if display:
+			display_im(new_item,slp_time=20)
+		
+		if save_file:
+			new_item.save(dest_path + fn)
+			print 'files are saved in', dest_path
+if replace_white_ == 1:
+	replace_white(new_color=(200, 200, 200), display=False, save_file=True)
+
+
+
+def save_image_to_single_channel(im_name):
+	import scipy.misc as misc
+	im = misc.imread(im_name)
+	print 'shape input ori:', im.shape
+	
+	im = misc.imread(im_name,'I')
+	print 'shape input I:', im.shape
+	save_name = im_name[:-4] + '.png'
+	#save_name = im_name
+	misc.imsave(save_name,im)
+	
+	im_val = misc.imread(save_name)
+	if len(im_val.shape) != 2:
+		print 'shape output:', im_val
+	else:
+		print 'validated'#validate
+
+'''
+path = '../Test_Images/MA/test_represent/masks/'
+dest_path = '../Test_Images/MA/test_represent/'
+#path = '../Data/data_3_segnet/mul_class/MA_real/training/3mula_2extra_masks/'
+dirs = [s for s in os.listdir(path)]
+for imn in dirs:
+	#save_image_to_single_channel('../cad_pub_m_005.png')
+  save_image_to_single_channel(dest_path + imn)
+'''
+
+def count_diff_pixel_values(picture, h, w):
+	ds = []
+	#h,w = 320,320
+	
+	for i in xrange(h):
+		for j in xrange(w):
+			#print 'picture[i][j] :', picture[i][j]
+			if picture[i][j] not in ds:
+				ds.append(picture[i][j])
+	return len(ds), ds
+
+
+
+def ceil_pixel_values(threshold, new_pixel_value,display=False, save_file=True):
+	import scipy.misc as misc
+	"""
+	In order to have the same 1-channel images, misc must be used for saving to file.
+	"""
+	#all pixel value higher than threshold are to be set to the value of a new value
+	file_path = '../Test_Images/MA/test_represent/masks_1ch/'#Test_Images/MA/test_represent/masks_1c
+	dest_path = '../Test_Images/MA/test_represent/'
+	
+	#dest_path = '../Data/data_3_segnet/mul_class/MA_real/training/jpgs/'
+	dirs = sorted(os.listdir(file_path))
+
+	#dirs = dirs[0:1]
+	# print 'dir:', dirs
+	for item in dirs:
+		# print 'item:', item
+		#item = 'cad_pub_m_001.png'
+		#item = 'cad_exp_m_012.png'
+		fn = os.path.basename(item)
+		
+		im = misc.imread(file_path + item)
+		h,w = im.shape
+		im = np.asarray(im.reshape(h, w))
+		#misc.imshow(im)
+		print 'input h,w:', h,w, 'shape:', im.shape
+		
+		n, diff_v = count_diff_pixel_values(im, h,w)
+		print 'item:', item,'        n:',n, ', diff:',diff_v
+		if display:
+			misc.imshow('before', im)
+		
+		if len(im.shape) > 2 and n >2:
+			idx = im[:, :, 0] > threshold
+			# print 'idx:', idx
+			#new_pixel_value = 254
+			im[idx, 0] = new_pixel_value
+			
+			debug = True
+			if debug:
+				idx_ = im[:, :, 0] > threshold
+				diff = np.diff(np.asarray(idx_, dtype=int))
+				sum = (diff < 0).sum()
+				if sum > 0:
+					print 'not completely thresholded', fn, ', sum:', sum
+		elif len(im.shape) == 2 and n >2: #then we must use misc to save 1-ch image
+			idx = im[:, :] > threshold
+			# print 'idx:', idx
+			im[idx] = new_pixel_value
+			
+			debug = True
+			if debug:
+				n, diff_v = count_diff_pixel_values(im, h, w)
+				print 'item:', item, '        n:', n, ', diff:', diff_v
+				if n > 2:
+					print 'not completely thresholded', fn,n,', diff:', diff_v
+				#else:
+				#	print 'OK', fn
+		
+		if save_file:
+			misc.imsave(dest_path + fn, im)
+			print 'files are saved in', dest_path
+		
+		if display:
+			cv2.imshow('after', im)
+			cv2.waitKey(10)
+	print 'ceiling finished'
+
+
+# ceil_pixel_values_ = 1
+if ceil_pixel_values_ == 1:
+	ceil_pixel_values(threshold=0, new_pixel_value=200,display=False, save_file=True)
+
+
+def replace_element_in_array():
+	'''
+	replace all elements in array if their value is searched value
+	:return:
+	'''
+	p = '../tmp.png'
+	mask = imread(p,mode='RGB')
+	search_value = 160
+	replace_with = 1
+	
+	mask[mask == search_value] = replace_with
+	mask[mask == 200] = 2
+	mask[mask < 1] = 0
+	
+if replace_element_in_array_ == 1:
+	replace_element_in_array()
+	
+
+# convert png to jpg
+from PIL import Image
+import cStringIO
+from glob import glob
+
+
+def png_to_jpeg(file_path):
+	for obj in glob(file_path + "*.png"):
+		in_file = open(obj, "rb")
+		img = in_file.read()
+		try:
+			Image.open(cStringIO.StringIO(img))
+		except:
+			print("can not open image file error")
+		
+		im = Image.open(cStringIO.StringIO(img))
+		_image = cStringIO.StringIO()
+		im.save(_image, "JPEG")
+		store_image = _image.getvalue()
+		new_obj = obj.replace(obj.split('.')[-1], 'jpg')
+		# new_obj = str("new_") + obj.replace(obj.split('.')[-1], 'jpg')
+		out_file = open(new_obj, "wb")
+		out_file.write(store_image)
+		out_file.close()
+
+
+# png_to_jpeg('../tmp/distor_in/')
+
+
+########################################################
+def remove_small_obj():  # do_remove_small_obj
+	print 'doing remove images with small object'
+	count = 0
+	folders = []
+	# if use test image
+	
+	# dirs = os.listdir(crop_dest_path+settings.LABELS[1])
+	dirs = os.listdir(crop_dest_path)
+	ori_num_of_files = len(dirs)
+	print crop_dest_path
+	
+	for item in dirs:  # use defined directory
+		if os.path.isfile(crop_dest_path + item):
+			im = Image.open(crop_dest_path + item)
+			im = im.convert('LA')  # convert Image object image to gray
+			
+			# hy: two methods for getting file name
+			# fpath, fname = os.path.split(source_path + item)
+			# fname =  os.path.basename(source_path + item)
+			
+			# fname_wo_end = os.path.splitext(item)[0]
+			# print 'image name:', fname_wo_end
+			
+			w, h = im.size  # hy corrected order of w,h
+			# print 'w,h:',w,',',h
+			# print 'pix',pix, ',', pix2
+			
+			if h <> w:
+				# if h <> patch_size or w <> patch_size:
+				print 'some images are not defined. w,h:', w, ',', h
+				print 'Make sure the size is uniformed or comment out this condition.', item
+			# os.remove(crop_dest_path+item)
+			
+			whole_area = h * w
+			no_obj_area = 0
+			
+			# method 1 to get pixel
+			pix = im.load()  # get pixel values of Image object image, get point pixel use e.g. print pix[x,y]
+			# print 'max pixel', im.getextrema()
+			
+			for y in xrange(h):
+				for x in xrange(w):
+					# method 1
+					# pix = pix[x,y]   #get pixel value of point x,y
+					
+					# method 2
+					# pix = im.getpixel((x,y))
+					# print 'pix of test image', pix[x,y]
+					
+					# print 'pix of test image',pix[x,y]
+					
+					# hy normally do not use two bound threshold
+					# threshold_color_min=255
+					# threshold_color_max=0
+					
+					# threshold_min = (threshold_color_min,255)#for removing white compare with (thresholdvalue,255)
+					# threshold_max = (threshold_color_max,0) # set (250,255) to (255,255) to remove area close to white
+					# print pix[x,y]
+					if pix[x, y] == (0, 255):
+						# if pix[x,y] >= threshold_min and pix[x,y] <= threshold_max:
+						no_obj_area = no_obj_area + 1
+					# print 'pix backg', pix[x,y] #pix[x,y]
+			
+			proportion = float(no_obj_area / whole_area)
+			# print 'no object area', no_obj_area,'proportion', proportion
+			if proportion > 0.38:
+				count = count + 1
+				print 'prop', proportion, ',count to remove', count, ',', crop_dest_path + item
+				cmd = 'mv ' + crop_dest_path + item + ' ../Data/data_1_mix/'
+				os.system(cmd)  # os.remove(crop_dest_path+item)
+	print '\nremaining files:', ori_num_of_files, '-', count, '=', ori_num_of_files - count  # , len(os.listdir(crop_dest_path))
+
+
+if remove_small_obj_ == 1:
+	remove_small_obj()
+
+
+######################
+##https://www.safaribooksonline.com/library/view/programming-computer-vision/9781449341916/ch01.html
+def pca(X):
+	"""  Principal Component Analysis
+		input: X, matrix with training data stored as flattened arrays in rows
+		return: projection matrix (with important dimensions first), variance
+		and mean."""
+	
+	# get dimensions
+	num_data, dim = X.shape
+	print 'pca data shape', num_data, ', dim', dim
+	
+	# center data
+	mean_X = X.mean(axis=0)
+	X = X - mean_X
+	
+	if dim > num_data:
+		# PCA - compact trick used
+		M = dot(X, X.T)  # covariance matrix
+		e, EV = linalg.eigh(M)  # eigenvalues and eigenvectors
+		tmp = dot(X.T, EV).T  # this is the compact trick
+		V = tmp[::-1]  # reverse since last eigenvectors are the ones we want
+		S = sqrt(e)[::-1]  # reverse since eigenvalues are in increasing order
+		for i in range(V.shape[1]):
+			V[:, i] /= S
+	else:
+		# PCA - SVD used
+		U, S, V = linalg.svd(X)
+		V = V[:num_data]  # only makes sense to return the first num_data
+	
+	# return the projection matrix, the variance and the mean
+	return V, S, mean_X, e, EV
+
+
+from matplotlib.mlab import PCA
+from pylab import *
+import scipy.misc
+import pickle
+
+
+# import _tkinter #apt-get install python-tk
+def get_PCA(display=False, save_file=False):
+	f_key = 'cad'
+	data_path = '../Data/MA_cad/training/'  # main_path
+	# data_path = '../Data/data_3_segnet/mul_class/MA_real/validation/'  # main_path
+
+	print 'train_path:', data_path
+
+	#####################################################################################
+	pca_source_path = data_path + 'others/2images_6cl/'
+	#pca_source_path = '../tmp/resized/' + f_key + '/'  # settings.LABELPATH hinten,oben-, links-, unten0, rechts,
+	# pca_source_path = '../tmp/resized/pca/1/'  # settings.LABELPATH
+	#pca_dest_path = '../tmp/resized/rest5/'
+	print 'do PCA'
+	# ims = [s for s in os.listdir(pca_source_path) if 'full' not in s] #bg
+	ims = [s for s in os.listdir(pca_source_path) if '.jpg' in s]  # links full
+	print ims
+	
+	w, h, ch = cv2.imread(pca_source_path + ims[0]).shape
+	print 'ori w,h,ch', w, h, ch
+	
+	# make sure all images are in one size
+	_ims = []
+	for im in ims:
+		_im = Image.open(pca_source_path + im).convert('L')
+		# display_im(_im)
+		
+		# crop
+		
+		crop_size = _im.size[0]  # 227
+		x1, y1 = 0, 0
+		# crop_size = 690# (links,rechts full:crop_size 690,x1,y1=500,10) (hinten full:crop_size 600,x1,y1=270,320)
+		# x1,y1 = 500, 10
+		
+		bbox = [x1, y1, crop_size + x1, crop_size + y1]  # x1,y1, x2,y2
+		_ims.append(_im.crop(bbox))
+		
+		# another way:resize
+		# size = _im.size
+		# size = (227,227)
+		# _im.thumbnail(size,Image.ANTIALIAS)
+		# _ims.append(_im)
+		
+		#print '_im size', _im.size
+	
+	# create matrix
+	# construct data into 2D array
+	ims_mat = array([array(_im).flatten() for _im in _ims], 'f')
+	# im_mat = np.asarray(_ims[0])
+	print 'ori mat', ims_mat, '\nim_mat size', ims_mat.size
+	# im_mat_color = cv2.cvtColor(im_mat,cv2.COLOR_GRAY2BGR)
+	
+	# the found first num of projection matrics, the variance and the mean
+	descend_pca_results, descend_variance, mean, eigenval, eigenvec = pca(ims_mat)
+	
+	print 'descend_pca_results size:', descend_pca_results.size, 'mean size:', mean.shape
+	print 'descend_pca_result[0] size:', descend_pca_results[0].size, \
+		'num of images:', descend_pca_results.size / descend_pca_results[0].size
+	
+	show_size = int(sqrt(mean.size))
+	print 'show_size', show_size
+	
+	##############################################
+	# Display
+	#
+	if display or save_file:
+		
+		fig = figure()
+		gray()  # display grayscale
+		
+		fig.suptitle('PCA', size=16)
+		ax1 = subplot(2, 4, 1)
+		ax1.set_title('ori')
+		plot_im_num = min(7, len(ims))
+		
+		im_mat = np.asarray(_ims[0]).flatten()
+		
+		imshow(im_mat.reshape(show_size, show_size))
+		
+		ax2 = subplot(2, 4, 2)
+		ax2.set_title('mean')
+		imshow(mean.reshape(show_size, show_size))
+		
+		if save_file:
+			scipy.misc.imsave('../mean' + ImageType, mean.reshape(show_size, show_size))
+		
+		# top-left:mean, rest:modes with most different variations
+		for i in xrange(0, plot_im_num):
+			subplot(2, 4, i + 3)  # 2,3,4
+			test_im = np.asarray(_ims[i]).flatten()
+			# debug
+			# imshow(test_im.reshape(show_size,show_size))
+			
+			# find a factor that is in the same magnitude of eigenval
+			##eigenvec[   ]dot(eigenval[  ].T
+			q = descend_pca_results[0][i]
+			print i, 'pca e.v:', q
+			for index in xrange(200):
+				if abs(q) > 100:
+					q = q / 10
+				elif abs(q) < 10:
+					q = q * 10
+				else:
+					break
+			print i, '.q:', q
+			mu, sigma = 0, 0.1  # mean and standard deviation
+			s = np.random.normal(mu, sigma, 1000)  # generate 1000 gaussian random number
+			test_im = test_im * s[i] * q  # to each image add the quantity, multiplied by a normal random number
+			
+			print i, 's[i] * q:', s[i] * q, '\n'
+			imshow(test_im.reshape(show_size, show_size))
+			# imshow(descend_pca_results[i].reshape(show_size,show_size))
+			if save_file:
+				save_path = '../Data/' + f_key + '_pca_II_'
+				print 'pca images are saved in', save_path
+				scipy.misc.imsave(save_path + str(i) + ImageType, test_im.reshape(show_size, show_size))
+			# scipy.misc.imsave('../Data/data_2/unten/unten_pca_'+str(i)+ImageType,test_im.reshape(show_size,show_size))
+		
+		if display:
+			show()
+	
+	'''
+		#im_mat = np.array([[1,0,0],[0,1,0],[0,0,1]])
+		import matplotlib.pyplot as plt
+		from mpl_toolkits.mplot3d import Axes3D
+		x = []
+		y = []
+		z = []
+		for item in results.Y:
+			x.append(item[0])
+			y.append(item[1])
+			z.append(item[2])
+
+		plt.close('all')  # close all latent plotting windows
+		fig = plt.figure()  # Make a plotting figure
+		ax = Axes3D(fig)  # use the plotting figure to create a Axis3D object.
+		pltData = [x, y, z]
+		ax.scatter(pltData[0], pltData[1], pltData[2], 'bo')  # make a scatter plot of blue dots from the data
+
+		# make simple, bare axis lines through space:
+		xAxisLine = ((min(pltData[0]), max(pltData[0])), (0, 0),
+		             (0, 0))  # 2 points make the x-axis line at the data extrema along x-axis
+		ax.plot(xAxisLine[0], xAxisLine[1], xAxisLine[2], 'r')  # make a red line for the x-axis.
+		yAxisLine = ((0, 0), (min(pltData[1]), max(pltData[1])),
+		             (0, 0))  # 2 points make the y-axis line at the data extrema along y-axis
+		ax.plot(yAxisLine[0], yAxisLine[1], yAxisLine[2], 'r')  # make a red line for the y-axis.
+		zAxisLine = ((0, 0), (0, 0),
+		             (min(pltData[2]), max(pltData[2])))  # 2 points make the z-axis line at the data extrema along z-axis
+		ax.plot(zAxisLine[0], zAxisLine[1], zAxisLine[2], 'r')  # make a red line for the z-axis.
+
+		# label the axes
+		ax.set_xlabel("x-axis label")
+		ax.set_ylabel("y-axis label")
+		ax.set_zlabel("y-axis label")
+		ax.set_title("The title of the plot")
+		plt.show()  # show the plot
+		plt.pause(1)
+		#raw_input("<press Enter to close>")
+		plt.close(fig)
+		'''
+
+
+# start_PCA = True
+if get_PCA_ == 1:
+	get_PCA(display=False, save_file=True)
+
+
+# another pca
+def do_PCA2(display=False, save_file=False):
+	# list of available images
+	pca_source_path = '../Data/data_2/links/'
+	dirs = [s for s in os.listdir(pca_source_path) if 'r_245_u16' in s and s.endswith(ImageType)]  # for links
+	
+	# tmp
+	# image_names = os.list
+	image_descs = []
+	for im in dirs:
+		im = Image.open(pca_source_path + im).convert('LA')
+		im.thumbnail((500, 500), Image.ANTIALIAS)
+		image_descs.append(im)
+	
+	# image_descs = np.vstack(image_descs)
+	print 'image_descs shape or size', image_descs[0].size
+	################################
+	from sklearn import datasets
+	iris = datasets.load_iris()
+	from sklearn import decomposition
+	
+	pca = decomposition.PCA(n_components=2)
+	pca.fit(iris.data)
+	print '\n----------------\n--------------', iris.data[0]
+	print '\n----------------target-----------------\n', iris.target
+	print 'iris0 data shape or size', iris.data[0].shape, iris.data[0].size
+	X = pca.transform(iris.data)
+	print 'X shape or size', X.shape, X.size
+	scatter(X[:, 0], X[:, 1], c=iris.target)  # c:color
+	print 'target shape or size', iris.target.shape, iris.target.size
+	show()
+
+
+# do_PCA2(display=False,save_file=False)
+
+
+def faces():
+	import numpy as np
+	import pylab as pl
+	from sklearn import cross_val, datasets, decomposition, svm
+	
+	# ..
+	# .. load data ..
+	lfw_people = datasets.fetch_lfw_people(min_faces_per_person=70, resize=0.4)
+	perm = np.random.permutation(lfw_people.target.size)
+	lfw_people.data = lfw_people.data[perm]
+	lfw_people.target = lfw_people.target[perm]
+	faces = np.reshape(lfw_people.data, (lfw_people.target.shape[0], -1))
+	train, test = iter(cross_val.StratifiedKFold(lfw_people.target, k=4)).next()
+	X_train, X_test = faces[train], faces[test]
+	y_train, y_test = lfw_people.target[train], lfw_people.target[test]
+	
+	# ..
+	# .. dimension reduction ..
+	pca = decomposition.RandomizedPCA(n_components=150, whiten=True)
+	pca.fit(X_train)
+	X_train_pca = pca.transform(X_train)
+	X_test_pca = pca.transform(X_test)
+	
+	# ..
+	# .. classification ..
+	clf = svm.SVC(C=5., gamma=0.001)
+	clf.fit(X_train_pca, y_train)
+	
+	# ..
+	# .. predict on new images ..
+	for i in range(10):
+		print(lfw_people.target_names[clf.predict(X_test_pca[i])[0]])
+		_ = pl.imshow(X_test[i].reshape(50, 37), cmap=pl.cm.gray)
+		_ = raw_input()
+
+
+# faces()
+
+######################
+def convert_PCA():
+	pca_source_path = '../tmp/input_patches/'  # settings.LABELPATH
+	pca_dest_path = '../Data/'
+	print 'doing convert PCA'
+	
+	dirs = os.listdir(pca_source_path)
+	if not dirs:
+		print 'empty directory'
+		exit(0)
+	for item in dirs:  # use defined directory
+		if os.path.isfile(pca_source_path + item):
+			im = Image.open(pca_source_path + item)
+			
+			w, h = im.size  # hy corrected order of w,h
+			# print 'w,h:',w,',',h
+			fpath, fname = os.path.split(pca_source_path + item)
+			fname = os.path.basename(pca_source_path + item)
+			print 'fpath, fname', fpath, '---', fname
+			
+			gray_path = pca_dest_path  # hy: here todo optimize the counter for character position
+			print 'gray_path', gray_path
+			f_out = gray_path + fname[0:-4] + '_cvt' + ImageType
+			print 'f_out', f_out
+			im.save(f_out)  # hy: use this no restriction for image type, jpg,jpeg,png
+
+
+if convertPCA_ == 1:
+	convert_PCA()
+
+########################################################
+
+
+
+"""
+ #changing aspect ratio slightly
+
+ new_Width = np.int(Width*Aspect_Factor)
+ deformed = cv2.resize(original,(new_Width,Height))
+ new_file = file.split('jpg')[-2]+'_deformed_.jpg'
+ cv2.imwrite(new_file,deformed)
+
+ #cropping
+ #center
+ cropped = original[Crop_h:Height-Crop_h,Crop_w:Width-Crop_w]
+ new_file = file.split('jpg')[-2]+'_CroppedC_.jpg'
+ cv2.imwrite(new_file,cropped)
+ #leftUp
+ cropped = original[:Height-Crop_h,:Width-Crop_w]
+ new_file = file.split('jpg')[-2]+'_CroppedLU_.jpg'
+ cv2.imwrite(new_file,cropped)
+ #LeftDown
+ cropped = original[Crop_h:,:Width-Crop_w]
+ new_file = file.split('jpg')[-2]+'_CroppedLD_.jpg'
+ cv2.imwrite(new_file,cropped)
+ #RightUP
+ cropped = original[:Height-Crop_h,Crop_w]
+ new_file = file.split('jpg')[-2]+'_CroppedRU_.jpg'
+ cv2.imwrite(new_file,cropped)
+ #RightDown
+ cropped = original[Crop_h:,:Width-Crop_w]
+ new_file = file.split('jpg')[-2]+'_CroppedRD_.jpg'
+ cv2.imwrite(new_file,cropped)
+ #CenterExtreme
+ #cropped = original[Crop_h*2:Height-Crop_h*2, Crop_w*3, Width-Crop_w*3] #hy:be careful not out of range
+ ropped = original[Crop_h * 2:Height - Crop_h * 2, Crop_w * 3 : Width - Crop_w * 3]
+ new_file = file.split('jpg')[-2]+'_CroppedCExtreme_.jpg'
+ cv2.imwrite(new_file,cropped)
+
+ """
+
+if split_Data == 1:
+	print 'splitting data'
+	for i in xrange(length):
+		# cmd = 'mv ' + '../Data/data_3/cam2/' + fileprefix[i] + '*.*' + ' ' + '../Data/data_3/' + folder_list[i]
+		cmd = 'mv ' + settings.data + fileprefix[i] + '*.*' + ' ' + settings.data + settings.LABELS[i]
+		os.system(cmd)
+
+if split_Inputpatches == 1:
+	print 'splitting input patches'
+	for i in xrange(length):
+		cmd = 'mv ' + settings.patches + fileprefix[i] + '*.* ' + settings.patches + settings.LABELS[i]
+		os.system(cmd)
+
+if split_Test_Images == 1:
+	print 'splitting test images'
+	for i in xrange(length):
+		cmd = 'mv ' + settings.test_images + fileprefix[i] + '*.* ' + settings.test_images + settings.LABELS[i]
+		os.system(cmd)
+
+# Todo create config file
+# Todo Add flags for different distortions
+# Todo Remove some transforms before show
+# Todo Work on a better rotation
+
+def cp_matched_files(src_im, file_p):
+	focused_file_p = '/home/adas/Documents/haiyan_paperwork/red_selected/'
+	p_from = '/home/adas/Documents/haiyan_paperwork/1572masks_ana/'
+	p_to = '/home/adas/Documents/haiyan_paperwork/red_selected_masks/'
+	src_im = [s for s in os.listdir(focused_file_p)]
+	#src_from = [s for s in os.listdir(p_from)]
+
+	for im in src_im:
+		m = im.replace('_im_','_m_')
+		m = m.replace('.jpg','.png')
+		print p_from+m
+		cmd = 'mv '+ p_from+ m + ' ' + p_to
+		os.system(cmd)
+
+#cp_matched_files('','')
