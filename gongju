@@ -1,4 +1,4 @@
-# Changes by Haiyan, change logs are in tensor_train_view.py
+
 #####################################################################################################
 from PIL import ImageDraw
 from PIL import ImageFilter
@@ -1181,54 +1181,54 @@ def set_video_window(TestFace, scale=1):
 			# Video file for Demo
 			# VIDEO_FILE = '../Test_Videos/dark.avi'
 			# VIDEO_FILE = '../tmp/vlc-10h05m41s_bg_holder.avi'
-			VIDEO_FILE = '../Test_Images/Test_Videos/LegoTestVideo1.mp4'
+			VIDEO_FILE = '../Test_Images/Test_Videos/TestVideo1.mp4'
 			VIDEO_FILE = '../Test_Images/MA/MA_videos/MOV_0045.mp4' #42
-			# These settings are for LegoTestVideo1.avi
+			# These settings are for TestVideo1.avi
 			crop_x1 = 0  # 550
 			crop_y1 = 0  # 300 780
 			area_step_size = 1080  # 640
 			video_label = 3
 		if TestFace == 'hinten':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoHinten.avi'
-			# These settings are for LegoTestVideoHinten.avi
+			VIDEO_FILE = '../Test_Videos/TestVideoHinten.avi'
+			# These settings are for TestVideoHinten.avi
 			crop_x1 = 680
 			crop_y1 = 850
 			area_step_size = 210
 			video_label = 0
 		
 		if TestFace == 'links':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoLinks.avi'
+			VIDEO_FILE = '../Test_Videos/TestVideoLinks.avi'
 			crop_x1 = 560
 			crop_y1 = 660
 			area_step_size = 400
 			video_label = 1
 		
 		if TestFace == 'oben':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoOben.avi'
+			VIDEO_FILE = '../Test_Videos/TestVideoOben.avi'
 			crop_x1 = 660
 			crop_y1 = 460
 			area_step_size = 400
 			video_label = 2
 		
 		if TestFace == 'rechts':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoRechts.avi'
-			# These settings are for LegoTestVideoRechts.avi.
+			VIDEO_FILE = '../Test_Videos/TestVideoRechts.avi'
+			# These settings are for TestVideoRechts.avi.
 			crop_x1 = 550
 			crop_y1 = 600
 			area_step_size = 450
 			video_label = 3
 		
 		if TestFace == 'unten':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoUnten.avi'
-			# These settings are for LegoTestVideoUnten.avi
+			VIDEO_FILE = '../Test_Videos/TestVideoUnten.avi'
+			# These settings are for TestVideoUnten.avi
 			crop_x1 = 860
 			crop_y1 = 600
 			area_step_size = 250
 			video_label = 4
 		
 		if TestFace == 'vorn':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoVorn.avi'
-			# Following are settings for the video LegoTestVideoVorn.avi
+			VIDEO_FILE = '../Test_Videos/TestVideoVorn.avi'
+			# Following are settings for the video TestVideoVorn.avi
 			crop_x1 = 680
 			crop_y1 = 790
 			area_step_size = 390  # hy: if we do not need the test window to move around in Demo, then it is just the width
@@ -1237,94 +1237,94 @@ def set_video_window(TestFace, scale=1):
 	if scale == 2:
 		# version middle size 2
 		if TestFace == 'hinten':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoHinten.avi'
-			# These settings are for LegoTestVideoHinten.avi,
+			VIDEO_FILE = '../Test_Videos/TestVideoHinten.avi'
+			# These settings are for TestVideoHinten.avi,
 			crop_x1 = 580
 			crop_y1 = 750
 			area_step_size = 510
 			video_label = 0
 		
 		if TestFace == 'links':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoLinks.avi'
-			# These settings are for LegoTestVideoLinks.avi,
+			VIDEO_FILE = '../Test_Videos/TestVideoLinks.avi'
+			# These settings are for TestVideoLinks.avi,
 			crop_x1 = 360
 			crop_y1 = 460
 			area_step_size = 880
 			video_label = 1
 		
 		if TestFace == 'oben':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoOben.avi'
+			VIDEO_FILE = '../Test_Videos/TestVideoOben.avi'
 			crop_x1 = 660
 			crop_y1 = 460
 			area_step_size = 500
 			video_label = 2
 		
 		if TestFace == 'rechts':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoRechts.avi'
-			# These settings are for LegoTestVideoRechts.avi,
+			VIDEO_FILE = '../Test_Videos/TestVideoRechts.avi'
+			# These settings are for TestVideoRechts.avi,
 			crop_x1 = 550
 			crop_y1 = 600
 			area_step_size = 620
 			video_label = 3
 		
 		if TestFace == 'unten':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoUnten.avi'
+			VIDEO_FILE = '../Test_Videos/TestVideoUnten.avi'
 			crop_x1 = 860
 			crop_y1 = 600
 			area_step_size = 470
 			video_label = 4
 		
 		if TestFace == 'vorn':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoVorn.avi'
-			# Following are settings for the video LegoTestVideoVorn.avi
+			VIDEO_FILE = '../Test_Videos/TestVideoVorn.avi'
+			# Following are settings for the video TestVideoVorn.avi
 			crop_x1 = 520
 			crop_y1 = 590
-			area_step_size = 750  # hy: if we do not need the test window to move around in Demo, then it is just the width
+			area_step_size = 750  # if we do not need the test window to move around in Demo, then it is just the width
 			video_label = 5
 	
 	if scale == 3:
 		# version middle size 3
 		if TestFace == 'hinten':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoHinten.avi'
-			# These settings are for LegoTestVideoHinten.avi,
+			VIDEO_FILE = '../Test_Videos/TestVideoHinten.avi'
+			
 			crop_x1 = 550
 			crop_y1 = 780
 			area_step_size = 410
 			video_label = 0
 		
 		if TestFace == 'links':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoLinks.avi'
-			# These settings are for LegoTestVideoLinks.avi,
+			VIDEO_FILE = '../Test_Videos/TestVideoLinks.avi'
+			# These settings are for TestVideoLinks.avi,
 			crop_x1 = 260
 			crop_y1 = 560
 			area_step_size = 480
 			video_label = 1
 		
 		if TestFace == 'oben':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoOben.avi'
+			VIDEO_FILE = '../Test_Videos/TestVideoOben.avi'
 			crop_x1 = 700
 			crop_y1 = 360
 			area_step_size = 600
 			video_label = 2
 		
 		if TestFace == 'rechts':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoRechts.avi'
-			# These settings are for LegoTestVideoRechts.avi,
+			VIDEO_FILE = '../Test_Videos/TestVideoRechts.avi'
+			# These settings are for TestVideoRechts.avi,
 			crop_x1 = 650
 			crop_y1 = 800
 			area_step_size = 320
 			video_label = 3
 		
 		if TestFace == 'unten':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoUnten.avi'
+			VIDEO_FILE = '../Test_Videos/TestVideoUnten.avi'
 			crop_x1 = 860
 			crop_y1 = 600
 			area_step_size = 570
 			video_label = 4
 		
 		if TestFace == 'vorn':
-			VIDEO_FILE = '../Test_Videos/LegoTestVideoVorn.avi'
-			# Following are settings for the video LegoTestVideoVorn.avi
+			VIDEO_FILE = '../Test_Videos/TestVideoVorn.avi'
+			# Following are settings for the video TestVideoVorn.avi
 			crop_x1 = 260
 			crop_y1 = 450
 			area_step_size = 420  # hy: if we do not need the test window to move around in Demo, then it is just the width
@@ -3786,3 +3786,303 @@ def valiate_dice_value(h,w):
 
 	dice = calc_dice_simi(pred / 255, ref_mask / 255, k=1)
 	print 'dice:', dice
+
+###########################################################################################
+#similarity
+import cv2
+import cv
+import numpy as np
+import time
+import numpy
+import imutils
+from PIL import Image
+import os
+import settings
+
+settings.set_global()
+
+
+def calc_histogram(img1, img2, color, bins, h):
+	for ch, col in enumerate(color):
+		hist_item1 = cv2.calcHist([img1], [ch], None, [256], [0, 255])
+		hist_item2 = cv2.calcHist([img2], [ch], None, [256], [0, 255])
+		cv2.normalize(hist_item1, hist_item1, 0, 255, cv2.NORM_MINMAX)
+		cv2.normalize(hist_item2, hist_item2, 0, 255, cv2.NORM_MINMAX)
+		sc = cv2.compareHist(hist_item1, hist_item2, cv.CV_COMP_CORREL)
+		# printsc
+		hist = np.int32(np.around(hist_item1))
+		pts = np.column_stack((bins, hist))
+		cv2.polylines(h, [pts], False, col)
+	return sc
+
+
+# hy: calc similarity of each of images in group one to any of images in group two
+# get potential strong samples
+def calc_similarity(dirs1, path1, dirs2, path2, thresh, incl_neg_simi):
+	tmp_ = []
+	corr_ = []
+	
+	for item1 in dirs1:
+		for item2 in dirs2:
+			
+			img1 = cv2.imread(path1 + item1)
+			img1 = cv2.cvtColor(img1, cv.CV_BGR2HSV)
+			img2 = cv2.imread(path2 + item2)
+			img2 = cv2.cvtColor(img2, cv.CV_BGR2HSV)
+			
+			bins = np.arange(256).reshape(256, 1)
+			color = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+			h = np.zeros((300, 256, 3))
+			# print '\ncompare correlation cad vs cam:',item1,'vs',item2
+			corr = calc_histogram(img1, img2, color, bins, h)
+			corr_.append(corr)
+			if incl_neg_simi == 1:
+				if corr > float(thresh) or corr < -float(thresh):
+					# cmd = 'cp ' + path1+item1 + ' ./tmp/resized/' + name + '/'
+					# print cmd
+					# os.system(cmd)
+					tmp_.append(item1)
+				#print 'similar images:', item1, 'vs', item2, ', confidence:', corr
+			else:
+				if corr > float(thresh):
+					# cmd = 'cp ' + path1+item1 + ' ./tmp/resized/' + name + '/'
+					# print cmd
+					# os.system(cmd)
+					tmp_.append(item1)
+				#print 'similar images:', item1, 'vs', item2, ', confidence:', corr
+	tmp_1 = list(set(tmp_))
+	count = len(tmp_1)
+	
+	return count, tmp_1, corr_, min(corr_), max(corr_)
+
+
+def calc_similarity_low(dirs1, path1, dirs2, path2, thresh, incl_neg_simi):
+	tmp_ = []
+	corr_ = []
+	
+	for item1 in dirs1:
+		for item2 in dirs2:
+			
+			img1 = cv2.imread(path1 + item1)
+			img1 = cv2.cvtColor(img1, cv.CV_BGR2HSV)
+			img2 = cv2.imread(path2 + item2)
+			img2 = cv2.cvtColor(img2, cv.CV_BGR2HSV)
+			
+			bins = np.arange(256).reshape(256, 1)
+			color = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+			h = np.zeros((300, 256, 3))
+			# print '\ncompare correlation cad vs cam:',item1,'vs',item2
+			corr = calc_histogram(img1, img2, color, bins, h)
+			corr_.append(corr)
+			if incl_neg_simi == 1:
+				if corr < float(thresh) or corr > -float(thresh):
+					# cmd = 'cp ' + path1+item1 + ' ./tmp/resized/' + name + '/'
+					# print cmd
+					# os.system(cmd)
+					tmp_.append(item1)
+				# print 'similar images:', item1, 'vs', item2, ', confidence:', corr
+			else:
+				if corr < float(thresh):
+					# cmd = 'cp ' + path1+item1 + ' ./tmp/resized/' + name + '/'
+					# print cmd
+					# os.system(cmd)
+					tmp_.append(item1)
+				# print 'similar images:', item1, 'vs', item2, ', confidence:', corr
+	tmp_1 = list(set(tmp_))
+	count = len(tmp_1)
+	
+	return count, tmp_1, corr_, min(corr_), max(corr_)
+
+
+def split_samples(tmpA, tmpB):
+	strong_disturb_to_other_ = []
+	strong_pos_ = []
+	for i in xrange(len(tmpA)):
+		if tmpA[i] in tmpB:
+			strong_disturb_to_other_.append(tmpA[i])
+		
+		if tmpA[i] not in tmpB:
+			strong_pos_.append(tmpA[i])
+	strong_disturb_to_other = list(set(strong_disturb_to_other_))
+	strong_pos = list(set(strong_pos_))
+	print '\ntotal number of strong disturb to others (remove)', len(strong_disturb_to_other)
+	print 'total number of strong positive samples (keep)', len(strong_pos)
+	return strong_pos, strong_disturb_to_other
+
+
+def compare_images_cv():
+	##############################################################
+	##############################################################
+	input_folder_name = 'unten'
+	test_image_path = '../Test_Images/testpkg7_2/'
+	path1 = '../Data/top_data/training/' + input_folder_name + '/'  # input
+	path3 = test_image_path + input_folder_name + '/'  # hy: target
+	# path3 = './Test_Images/' + input_folder_name[5:] + '/'  # target
+	
+	# disturbances: the rest classes, other than input class
+	path2_1 = test_image_path + 'v/'
+	path2_2 = test_image_path + 'r/'
+	path2_3 = test_image_path + 'h/'
+	path2_4 = test_image_path + 'l/'
+	path2_5 = test_image_path + 'o/'
+	
+	dirs1 = [s for s in os.listdir(path1) if 'cad' in s]
+	# dirs1_ = os.listdir(path1)
+	# dirs1 = dirs1_[2001:len(dirs1_)-1]
+	# dirs1 = dirs1_[0:100]
+	
+	dirs3 = os.listdir(path3)
+	dirs2_1 = os.listdir(path2_1)
+	dirs2_2 = os.listdir(path2_2)
+	dirs2_3 = os.listdir(path2_3)
+	dirs2_4 = os.listdir(path2_4)
+	dirs2_5 = os.listdir(path2_5)
+	thresh13 = 0.01
+	
+	count, cmp13, corr, corr_min, corr_max = calc_similarity(dirs1, path1, dirs3, path3, thresh13, 1)
+	print 'min', corr_min, 'max', corr_max, 'total similar images, 1 vs target:', count
+	
+	cmp_dict = dict(zip(cmp13,corr))
+	import operator
+	cmp13_sorted = sorted(cmp_dict.items(), key=operator.itemgetter(1))
+	print 'top similar'
+	for item in cmp13_sorted:
+		print item
+	print '\n'
+	thresh13 = corr_max - 0.1
+	thresh12 = thresh13
+	
+	count, cmp13, corr, corr_min, corr_max = calc_similarity(dirs1, path1, dirs3, path3, thresh13, 1)
+	print 'min', corr_min, 'max', corr_max, 'total similar images, 1 vs target:', count
+	
+	if count > 0:
+		# '''
+		count, cmp12_1, corr, corr_min, corr_max = calc_similarity(dirs1, path1, dirs2_1, path2_1, thresh12, 1)
+		print 'min', corr_min, 'max', corr_max, 'total similar images, 1 vs 2_1:', count
+		
+		count, cmp12_2, corr, corr_min, corr_max = calc_similarity(dirs1, path1, dirs2_2, path2_2, thresh12, 1)
+		print 'min', corr_min, 'max', corr_max, 'total similar images, 1 vs 2_2:', count
+		
+		count, cmp12_3, corr, corr_min, corr_max = calc_similarity(dirs1, path1, dirs2_3, path2_3, thresh12, 1)
+		print 'min', corr_min, 'max', corr_max, 'total similar images, 1 vs 2_3:', count
+		
+		count, cmp12_4, corr, corr_min, corr_max = calc_similarity(dirs1, path1, dirs2_4, path2_4, thresh12, 1)
+		print 'min', corr_min, 'max', corr_max, 'total similar images, 1 vs 2_4:', count
+		
+		count, cmp12_5, corr, corr_min, corr_max = calc_similarity(dirs1, path1, dirs2_5, path2_5, thresh12, 1)
+		print 'min', corr_min, 'max', corr_max, 'total similar images, 1 vs 2_5:', count
+		tmpA = cmp13  # hy: potential good samples
+		
+		strong, disturb = split_samples(tmpA, cmp12_1)
+		strong, disturb = split_samples(strong, cmp12_2)
+		strong, disturb = split_samples(strong, cmp12_3)
+		strong, disturb = split_samples(strong, cmp12_4)
+		strong, disturb = split_samples(strong, cmp12_5)
+		
+		print 'final strong samples', len(strong)
+		for item in strong:
+			print item
+		dest_path = './Data/strong/'
+		save_file = False
+		if save_file:
+			for item1 in strong:
+				# print item1
+				cmd = 'cp ' + path1 + item1 + ' ' + dest_path
+				os.system(cmd)
+			print 'total images found:', len(os.listdir(dest_path))
+		
+		################################ get weak neg #####
+		strong, disturb = split_samples(tmpA, cmp12_1)
+		strong, disturb = split_samples(disturb, cmp12_2)
+		strong, disturb = split_samples(disturb, cmp12_3)
+		strong, disturb = split_samples(disturb, cmp12_4)
+		strong, disturb = split_samples(disturb, cmp12_5)
+		
+		print 'final strong disturb to other classes:', len(disturb)
+		print disturb
+		dest_path = './Data/disturb/'
+		if save_file:
+			for item_weak in disturb:
+				cmd = 'cp ' + path1 + item_weak + ' ' + dest_path
+				os.system(cmd)
+			print 'total images found:', len(os.listdir(dest_path))
+	# '''
+	else:
+		print 'no samples filtered'
+
+
+compare_images_cv()
+
+
+def get_weak_positive():
+	##############################################################
+	input_folder_name = 'weak_pos_tmp'
+	path1 = './Data/' + input_folder_name + '/'  # hy: input
+	path3 = './Test_Images/testpkg3_white_200x200/' + 'hinten' + '/'  # hy: target
+	
+	dirs1 = os.listdir(path1)
+	# dirs1_ = os.listdir(path1)
+	# dirs1 = dirs1_[2001:len(dirs1_)-1]
+	# dirs1 = dirs1_[0:100]
+	
+	dirs3 = os.listdir(path3)
+	thresh13 = 0
+	
+	count, cmp13, corr_min, corr_max = calc_similarity(dirs1, path1, dirs3, path3, thresh13, 1)
+	print 'min', corr_min, 'max', corr_max, 'total similar images, 1 vs target:', count
+	
+	thresh13 = corr_min + 0.01
+	thresh12 = thresh13
+	
+	count, cmp13, corr_min, corr_max = calc_similarity_low(dirs1, path1, dirs3, path3, thresh13, 0)
+	print 'min', corr_min, 'max', corr_max, 'total weak similar images, 1 vs target:less than', thresh13, count
+	
+	if count > 0:
+		tmpA = cmp13  # hy: potential good samples
+		dest_path = './Data/weak_pos/'
+		for item1 in tmpA:
+			# print item1
+			cmd = 'mv ' + path1 + item1 + ' ' + dest_path
+			os.system(cmd)
+		print 'total weak positive images (remove):', len(os.listdir(dest_path))
+	
+	else:
+		print 'no samples filtered'
+
+
+#get_weak_positive()
+
+
+# import numpy
+# from PIL import Image
+# import cv2
+
+def similarness(image1, image2):
+	"""
+Return the correlation distance be1tween the histograms. This is 'normalized' so that
+1 is a perfect match while -1 is a complete mismatch and 0 is no match.
+"""
+	# Open and resize images to 200x200
+	i1 = Image.open(image1).resize((200, 200))
+	i2 = Image.open(image2).resize((200, 200))
+	
+	# Get histogram and seperate into RGB channels
+	i1hist = numpy.array(i1.histogram()).astype('float32')
+	i1r, i1b, i1g = i1hist[0:256], i1hist[256:256 * 2], i1hist[256 * 2:]
+	# Re bin the histogram from 256 bins to 48 for each channel
+	i1rh = numpy.array([sum(i1r[i * 16:16 * (i + 1)]) for i in range(16)]).astype('float32')
+	i1bh = numpy.array([sum(i1b[i * 16:16 * (i + 1)]) for i in range(16)]).astype('float32')
+	i1gh = numpy.array([sum(i1g[i * 16:16 * (i + 1)]) for i in range(16)]).astype('float32')
+	# Combine all the channels back into one array
+	i1histbin = numpy.ravel([i1rh, i1bh, i1gh]).astype('float32')
+	
+	# Same steps for the second image
+	i2hist = numpy.array(i2.histogram()).astype('float32')
+	i2r, i2b, i2g = i2hist[0:256], i2hist[256:256 * 2], i2hist[256 * 2:]
+	i2rh = numpy.array([sum(i2r[i * 16:16 * (i + 1)]) for i in range(16)]).astype('float32')
+	i2bh = numpy.array([sum(i2b[i * 16:16 * (i + 1)]) for i in range(16)]).astype('float32')
+	i2gh = numpy.array([sum(i2g[i * 16:16 * (i + 1)]) for i in range(16)]).astype('float32')
+	i2histbin = numpy.ravel([i2rh, i2bh, i2gh]).astype('float32')
+	
+	return cv2.compareHist(i1histbin, i2histbin, 0)
+
