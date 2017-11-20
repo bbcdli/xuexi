@@ -1,0 +1,643 @@
+# https://gist.github.com/mvoelk/ef4fc7fb905be7191cc2beb1421da37c
+#  -*- coding: utf-8 -*-
+
+import cv2
+import numpy as np
+import copy
+
+import keras
+from keras.backend import set_image_dim_ordering
+from keras.models import load_model
+
+from keras.layers import Input, Dense, Convolution2D, MaxPooling2D, AveragePooling2D, ZeroPadding2D, Dropout, Flatten, \
+    merge, Reshape, Activation, Lambda, GlobalAveragePooling2D, Merge
+from keras.optimizers import SGD
+from keras.layers.normalization import BatchNormalization
+from keras.models import Model
+from keras import initializations
+from keras.engine import Layer, InputSpec
+from keras import backend as K
+
+import sys
+
+from keras.backend import set_image_dim_ordering #hy
+import os
+import tools_classifier_seg as tools
+from keras.datasets import cifar10
+
+sys.setrecursionlimit(3000)
+
+PROJ_DIR = '/home/'
+do_reduce_mean = True
+
+train = False
+do_predict_classifier_ori = True
+do_predict_seg = False
+
+def load_and_preprocess_data_k(h, w):
+    data_path = PROJ_DIR + '/Data/MA_cad/training/'  # main_path
+
+    print 'train_path:', data_path
+
+    #####################################################################################
+    im_path = data_path + 'others/2images_6cl/'  # for both masks_mul and masks_mul_1extra
+    m_path = data_path + 'others/2masks_ex_ring/'
+
+    data_1s = sorted([s for s in os.listdir(im_path)])  # if 'out' in s])
+    m_1s = sorted([s for s in os.listdir(m_path)])  # if 'out' in s])
+    data_1s = data_1s[0:33]
+    print 'len of im:', len(data_1s), ', len of m:', len(m_1s)
+    #m_1s = m_1s[0:30]
+
+    images, masks = tools.import_data_k_resnet(im_path, m_path, data_1s, m_1s, h, w, len(data_1s), MUL=False,
+                                               do_Flipping=True, do_gblur=True)
+    # im_path,label_path, file_imgs, file_masks, h, w, maxNum, MUL=False,
+    # do_Flipping=False,do_gblur=False
+    if do_reduce_mean:
+        images = tools.reduce_mean_stdev(images)
+    #####################################################################################
+    add_data_2 = False
+    if add_data_2:
+        im_path2 = data_path + '/1im/'  #
+        m_path2 = data_path + '/1m/'  #
+        data_2s = sorted([s for s in os.listdir(im_path2)])
+        m_2s = sorted([s for s in os.listdir(m_path2)])
+        # data_2s = data_2s[0:30]
+        # m_2s = m_2s[0:30]
+
+        images2, mask2 = tools.import_data_k_segnet(im_path2, m_path2, data_2s, m_2s, h, w, len(data_2s),
+                                                    do_Flipping=True, do_gblur=True)
+        print 'train_path:', im_path2, ', images2 shape:', images2.shape, ', mask2 shape:', mask2.shape
+        if do_reduce_mean:
+            images2 = tools.reduce_mean_stdev(images2)
+        images = np.concatenate((images, images2), axis=0)
+        masks = np.concatenate((masks, mask2), axis=0)
+
+    #####################################################################################
+    print 'images shape after mean reduction:', images.shape  # images shape: (849, 33856, 1) example 6c
+    return images, masks
+
+class Scale(Layer):
+    '''Custom Layer for ResNet used for BatchNormalization.
+
+    Learns a set of weights and biases used for scaling the input data.
+    the output consists simply in an element-wise multiplication of the input
+    and a sum of a set of constants:
+            out = in * gamma + beta,
+    where 'gamma' and 'beta' are the weights and biases learned.
+    # Arguments
+            axis: integer, axis along which to normalize in mode 0. For instance,
+                    if your input tensor has shape (samples, channels, rows, cols),
+                    set axis to 1 to normalize per feature map (channels axis).
+            momentum: momentum in the computation of the
+                    exponential average of the mean and standard deviation
+                    of the data, for feature-wise normalization.
+            weights: Initialization weights.
+                    List of 2 Numpy arrays, with shapes:
+                    `[(input_shape,), (input_shape,)]`
+            beta_init: name of initialization function for shift parameter
+                    (see [initializations](../initializations.md)), or alternatively,
+                    Theano/TensorFlow function to use for weights initialization.
+                    This parameter is only relevant if you don't pass a `weights` argument.
+            gamma_init: name of initialization function for scale parameter (see
+                    [initializations](../initializations.md)), or alternatively,
+                    Theano/TensorFlow function to use for weights initialization.
+                    This parameter is only relevant if you don't pass a `weights` argument.
+    '''
+
+    def __init__(self, weights=None, axis=-1, momentum=0.9, beta_init='zero', gamma_init='one', **kwargs):
+        self.momentum = momentum
+        self.axis = axis
+        self.beta_init = initializations.get(beta_init)
+        self.gamma_init = initializations.get(gamma_init)
+        self.initial_weights = weights
+        super(Scale, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        self.input_spec = [InputSpec(shape=input_shape)]
+        shape = (int(input_shape[self.axis]),)
+
+        self.gamma = self.gamma_init(shape, name='{}_gamma'.format(self.name))
+        self.beta = self.beta_init(shape, name='{}_beta'.format(self.name))
+        self.trainable_weights = [self.gamma, self.beta]
+
+        if self.initial_weights is not None:
+            self.set_weights(self.initial_weights)
+            del self.initial_weights
+
+    def call(self, x, mask=None):
+        input_shape = self.input_spec[0].shape
+        broadcast_shape = [1] * len(input_shape)
+        broadcast_shape[self.axis] = input_shape[self.axis]
+
+        out = K.reshape(self.gamma, broadcast_shape) * x + K.reshape(self.beta, broadcast_shape)
+        return out
+
+    def get_config(self):
+        config = {"momentum": self.momentum, "axis": self.axis}
+        base_config = super(Scale, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+def identity_block(input_tensor, kernel_size, filters, stage, block):
+    '''The identity_block is the block that has no conv layer at shortcut
+    # Arguments
+            input_tensor: input tensor
+            kernel_size: defualt 3, the kernel size of middle conv layer at main path
+            filters: list of integers, the nb_filters of 3 conv layer at main path
+            stage: integer, current stage label, used for generating layer names
+            block: 'a','b'..., current block label, used for generating layer names
+    '''
+    eps = 1.1e-5
+    nb_filter1, nb_filter2, nb_filter3 = filters
+    conv_name_base = 'res' + str(stage) + block + '_branch'
+    bn_name_base = 'bn' + str(stage) + block + '_branch'
+    scale_name_base = 'scale' + str(stage) + block + '_branch'
+
+    x = Convolution2D(nb_filter1, 1, 1, name=conv_name_base + '2a', bias=False)(input_tensor)
+    x = BatchNormalization(epsilon=eps, axis=bn_axis, name=bn_name_base + '2a')(x)
+    x = Scale(axis=bn_axis, name=scale_name_base + '2a')(x)
+    x = Activation('relu', name=conv_name_base + '2a_relu')(x)
+
+    x = ZeroPadding2D((1, 1), name=conv_name_base + '2b_zeropadding')(x)
+    x = Convolution2D(nb_filter2, kernel_size, kernel_size,
+                      name=conv_name_base + '2b', bias=False)(x)
+    x = BatchNormalization(epsilon=eps, axis=bn_axis, name=bn_name_base + '2b')(x)
+    x = Scale(axis=bn_axis, name=scale_name_base + '2b')(x)
+    x = Activation('relu', name=conv_name_base + '2b_relu')(x)
+
+    x = Convolution2D(nb_filter3, 1, 1, name=conv_name_base + '2c', bias=False)(x)
+    x = BatchNormalization(epsilon=eps, axis=bn_axis, name=bn_name_base + '2c')(x)
+    x = Scale(axis=bn_axis, name=scale_name_base + '2c')(x)
+
+    x = merge([x, input_tensor], mode='sum', name='res' + str(stage) + block)
+    x = Activation('relu', name='res' + str(stage) + block + '_relu')(x)
+    return x
+
+
+def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2)):
+    '''conv_block is the block that has a conv layer at shortcut
+    # Arguments
+            input_tensor: input tensor
+            kernel_size: defualt 3, the kernel size of middle conv layer at main path
+            filters: list of integers, the nb_filters of 3 conv layer at main path
+            stage: integer, current stage label, used for generating layer names
+            block: 'a','b'..., current block label, used for generating layer names
+    Note that from stage 3, the first conv layer at main path is with subsample=(2,2)
+    And the shortcut should have subsample=(2,2) as well
+    '''
+    eps = 1.1e-5
+    nb_filter1, nb_filter2, nb_filter3 = filters
+    conv_name_base = 'res' + str(stage) + block + '_branch'
+    bn_name_base = 'bn' + str(stage) + block + '_branch'
+    scale_name_base = 'scale' + str(stage) + block + '_branch'
+
+    x = Convolution2D(nb_filter1, 1, 1, subsample=strides,
+                      name=conv_name_base + '2a', bias=False)(input_tensor)
+    x = BatchNormalization(epsilon=eps, axis=bn_axis, name=bn_name_base + '2a')(x)
+    x = Scale(axis=bn_axis, name=scale_name_base + '2a')(x)
+    x = Activation('relu', name=conv_name_base + '2a_relu')(x)
+
+    x = ZeroPadding2D((1, 1), name=conv_name_base + '2b_zeropadding')(x)
+    x = Convolution2D(nb_filter2, kernel_size, kernel_size,
+                      name=conv_name_base + '2b', bias=False)(x)
+    x = BatchNormalization(epsilon=eps, axis=bn_axis, name=bn_name_base + '2b')(x)
+    x = Scale(axis=bn_axis, name=scale_name_base + '2b')(x)
+    x = Activation('relu', name=conv_name_base + '2b_relu')(x)
+
+    x = Convolution2D(nb_filter3, 1, 1, name=conv_name_base + '2c', bias=False)(x)
+    x = BatchNormalization(epsilon=eps, axis=bn_axis, name=bn_name_base + '2c')(x)
+    x = Scale(axis=bn_axis, name=scale_name_base + '2c')(x)
+
+    shortcut = Convolution2D(nb_filter3, 1, 1, subsample=strides,
+                             name=conv_name_base + '1', bias=False)(input_tensor)
+    shortcut = BatchNormalization(epsilon=eps, axis=bn_axis, name=bn_name_base + '1')(shortcut)
+    shortcut = Scale(axis=bn_axis, name=scale_name_base + '1')(shortcut)
+
+    x = merge([x, shortcut], mode='sum', name='res' + str(stage) + block)
+    x = Activation('relu', name='res' + str(stage) + block + '_relu')(x)
+    return x
+
+
+def resnet152_model(weights_path_seg=None,weights_path=None,num_classes=2):
+    '''Instantiate the ResNet152 architecture,
+    # Arguments
+            weights_path: path to pretrained weight file
+    # Returns
+            A Keras model instance.
+    '''
+    eps = 1.1e-5
+
+    # Handle Dimension Ordering for different backends
+    global bn_axis
+    if K.image_dim_ordering() == 'tf':
+        print 'tf backend'
+        bn_axis = 3
+        img_input = Input(shape=(224, 224, 3), name='data')
+    else:
+        print 'theano backend'
+        bn_axis = 1
+        img_input = Input(shape=(3, 224, 224), name='data')
+
+    x = ZeroPadding2D((3, 3), name='conv1_zeropadding')(img_input)
+    x = Convolution2D(64, 7, 7, subsample=(2, 2), name='conv1', bias=False)(x)
+    x = BatchNormalization(epsilon=eps, axis=bn_axis, name='bn_conv1')(x)
+    x = Scale(axis=bn_axis, name='scale_conv1')(x)
+    x = Activation('relu', name='conv1_relu')(x)
+    x = MaxPooling2D((3, 3), strides=(2, 2), name='pool1')(x)
+
+    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1))
+    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b')
+    x = identity_block(x, 3, [64, 64, 256], stage=2, block='c')
+
+    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a')
+    for i in range(1, 8):
+        x = identity_block(x, 3, [128, 128, 512], stage=3, block='b' + str(i))
+
+    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a')
+    for i in range(1, 36):
+        x = identity_block(x, 3, [256, 256, 1024], stage=4, block='b' + str(i))
+
+    x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a')
+    x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b')
+    x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c')
+
+    x_fc = AveragePooling2D((7, 7), name='avg_pool')(x)
+    x_fc = Flatten()(x_fc)
+    x_fc = Dense(1000, activation='softmax', name='fc1000')(x_fc)
+
+    model = Model(img_input, x_fc)
+
+    # load weights
+    if weights_path:
+        model.load_weights(weights_path, by_name=True)
+
+
+    add_new_layer = False
+    if add_new_layer:
+        ############################################################################
+        #hy: add new layer
+        ############################################################################
+    
+        x_newfc = AveragePooling2D((7, 7), name='avg_pool')(x)
+        x_newfc = Flatten()(x_newfc)
+        x_newfc = Dense(num_classes, activation='softmax', name='fc8')(x_newfc)
+    
+        model = Model(img_input, x_newfc)
+        
+        if weights_path_seg:
+            model.load_weights(weights_path_seg, by_name=True)
+    
+        # Learning rate is changed to 0.001
+        if train:
+            sgd = SGD(lr=1e-3, decay=1e-6, momentum=0.9, nesterov=True)
+            model.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
+
+    return model
+
+def count_diff_pixel_values(picture, h, w):
+    ds = []
+    for row in xrange(h):
+        for col in xrange(w):
+            if picture[row][col] not in ds:
+                ds.append(picture[row][col])
+    return len(ds), ds
+
+if __name__ == '__main__':
+
+    '''
+    im = cv2.resize(cv2.imread(PROJ_DIR + 'elephant.jpg'), (224, 224)).astype(np.float32)
+
+    # Remove train image mean
+    im[:, :, 0] -= 103.939
+    im[:, :, 1] -= 116.779
+    im[:, :, 2] -= 123.68
+    '''
+
+    
+    img_rows, img_cols = 224, 224#224  # Resolution of inputs
+    channel = 3
+    num_classes = img_rows*img_cols
+    model_path = "../testbench/seg_mul/all_real/"
+    bg_LABEL = 'resnet_6cl_mixdark'
+    set_image_dim_ordering(dim_ordering='tf')
+    if train:
+        # Example to fine-tune on 3000 samples from Cifar10
+    
+        batch_size = 5
+        nb_epoch = 10
+    
+        #load data
+        X_train, Y_train = load_and_preprocess_data_k(img_rows, img_cols)
+        #(X_train, Y_train), (x_test, y_test) = cifar10.load_data()
+        print 'images shape direct:', X_train.shape, 'masks shape direct:', Y_train.shape
+        #X_train = np.resize(X_train,(50000,224,224,3))
+        #masks = np.resize(masks,(224,224))
+        Y_train = Y_train.reshape(-1,img_cols*img_rows) #batch_ys = batch_ys.reshape(-1, h, w,  1)
+    
+        print 'images shape:', X_train.shape, 'masks shape:', Y_train.shape
+        #designed for imges shape: (50000, 32, 32, 3) masks shape: (50000, 1)
+    
+        set_image_dim_ordering(dim_ordering='th')
+        print 'ordering:',K.image_dim_ordering()
+    
+        if K.image_dim_ordering() == 'th':
+            # Transpose image dimensions (Theano uses the channels as the 1st dimension)
+            #X_train = X_train.transpose((0, 3, 1, 2))
+            #im = im.transpose((2, 0, 1))
+            print 'new shape:',X_train.shape
+            # Use pre-trained weights for Theano backend
+            weights_path = PROJ_DIR + 'Data/MA_cad/resnet152_weights_th.h5'
+        else:
+            # Use pre-trained weights for Tensorflow backend
+            weights_path = PROJ_DIR + 'Data/MA_cad/resnet152_weights_tf.h5'
+    
+        #X_train, Y_train, X_valid, Y_valid = images[0:20], masks[0:20], images[21:29], masks[21:29]
+        #Y_train = np.reshape(Y_train[0],(img_cols,img_rows))
+        # Insert a new dimension for the batch_size
+        #X_train = np.expand_dims(X_train, axis=0)
+    
+        # Test pretrained model
+        #model = resnet152_model(weights_path)
+        
+        #model = resnet152_model(weights_path=weights_path, num_classes=num_classes)
+        model = resnet152_model(weights_path=None, num_classes=num_classes)
+        sgd = SGD(lr=1e-2, decay=1e-6, momentum=0.9, nesterov=True)
+    
+        
+        #checkpoint =
+        # ModelCheckpoint("models/hyperres/60kset/custom3.{epoch:02d}-{val_acc:.2f}.hdf5", monitor='val_acc', verbose=0, save_best_only=True, save_weights_only=False, mode='auto', period=1)
+        #callbacks_list = [checkpoint]
+        save_params = keras.callbacks.ModelCheckpoint(filepath=model_path + bg_LABEL + '{epoch:02d}.hdf5',
+                                                      monitor='val_loss', verbose=2,
+                                                      save_best_only=False, save_weights_only=False, mode='auto')
+        #model.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer=sgd, loss='binary_crossentropy', metrics=['accuracy'])
+    
+    
+        print 'ordering2:', K.image_dim_ordering()
+        model.fit(X_train, Y_train,
+                  batch_size=batch_size,
+                  nb_epoch=nb_epoch,
+                  shuffle=True,
+                  verbose=1,
+                  )
+    
+        '''
+        model.fit(X_train, Y_train,
+                  batch_size=batch_size,
+                  nb_epoch=nb_epoch,
+                  shuffle=True,
+                  verbose=1,
+                  validation_data=(X_valid, Y_valid),)
+        '''
+        print 'save'
+        model.save(model_path + 'model_' + bg_LABEL + '.h5')
+
+    
+    if do_predict_classifier_ori:
+        im_p = PROJ_DIR + 'elephant.jpg'
+        im = cv2.resize(cv2.imread(im_p), (224, 224)).astype(np.float32)
+        print 'predict class for input image:', im_p
+
+        # Remove train image mean
+        im[:, :, 0] -= 103.939
+        im[:, :, 1] -= 116.779
+        im[:, :, 2] -= 123.68
+        # Insert a new dimension for the batch_size
+        im = np.expand_dims(im, axis=0)
+        weights_path = PROJ_DIR + 'Data/MA_cad/resnet152_weights_tf.h5'
+        model = resnet152_model(weights_path=weights_path, num_classes=num_classes)
+        preds = model.predict(im)
+        print np.argmax(preds)
+        #print 'all preds:',preds
+
+        from pprint import pprint
+
+        with open(PROJ_DIR + 'Data/MA_cad/imagenet1000_clsid_to_human.txt', 'r') as f:
+            id2label = eval(f.read())
+
+        preds = preds.flatten()
+        top_rank = 17
+        top_preds = np.argsort(preds)[::-1][:top_rank]
+        #import pprint
+        print 'top ',top_rank,' results:'
+        pprint([(x, id2label[x], preds[x]) for x in top_preds])
+
+    if do_predict_seg:
+        import Image
+        from keras.models import load_model
+
+        set_image_dim_ordering(dim_ordering='th')
+        #image = cv2.resize(cv2.imread(PROJ_DIR + 'elephant.jpg'), (224, 224)).astype(np.float32)
+
+        # Remove train image mean
+        #image[:, :, 0] -= 103.939
+        #image[:, :, 1] -= 116.779
+        #image[:, :, 2] -= 123.68
+        # Insert a new dimension for the batch_size
+        #image = np.expand_dims(image, axis=0)
+        #preds = model.predict(image)
+        #print np.argmax(preds)
+        
+        
+        #image = Image.open(PROJ_DIR + 'Data/MA_cad/training/others/2images_6cl/cad_6c_im_011.jpg')
+        #image.load()
+        #image = np.asarray(image, dtype="int32")
+        #img_h, img_w = image.shape[0:2]
+        #label = Image.open(PROJ_DIR + 'Data/MA_cad/training/others/2masks_ex_ring/cad_6c_m_011.png')
+
+        
+        image = cv2.imread(PROJ_DIR + 'Data/MA_cad/training/others/2images_6cl/cad_6c_im_011.jpg')
+        image = cv2.resize(image,(img_cols,img_rows)).astype(np.float32)
+        if do_reduce_mean:
+            image = tools.reduce_mean_stdev(image)
+        # Remove train image mean
+        #image[:, :, 0] -= 103.939
+        #image[:, :, 1] -= 116.779
+        #image[:, :, 2] -= 123.68
+        
+        img_h, img_w = image.shape[0:2]
+        label = cv2.imread(PROJ_DIR + 'Data/MA_cad/training/others/2masks_ex_ring/cad_6c_m_011.png')
+        #label = cv2.imread(PROJ_DIR + 'Data/MA_cad/training/others/3images_gimp/cad_6c_gimp_hinten_im_5.jpg')
+        # long_side = max(img_h, img_w, image_size[0], image_size[1])
+        #pad_w = max(img_cols - img_w, 0)
+        #pad_h = max(img_rows - img_h, 0)
+        #image = np.lib.pad(image, ((pad_h / 2, pad_h - pad_h / 2), (pad_w / 2, pad_w - pad_w / 2), (0, 0)), 'constant',
+        #                   constant_values=0.)
+        
+        # image -= mean_value
+        '''img = array_to_img(image, 'channels_last', scale=False)
+				img.show()
+				exit()'''
+        image = cv2.resize(image, (img_cols,img_rows))
+        
+        image = image.reshape(3,img_cols,img_rows)
+
+        image = np.expand_dims(image, axis=0)
+        #image = preprocess_input(image)
+
+        weights_path_seg = PROJ_DIR + 'testbench/seg_mul/'+'model_6cl_mixdark.h5'
+        model = resnet152_model(weights_path_seg=weights_path_seg,num_classes=num_classes)
+        #model = load_model(model_path + bg_model)
+        #model = load_model(weights_path_seg)
+
+        #model.load_weights(weights_path, by_name=True)
+        print 'weights loaded'
+
+        result = model.predict(image, batch_size=1)
+        #result = np.argmax(np.squeeze(result), axis=-1).astype(np.uint8)
+        print 'result:', result
+        print 'result size:',result.size
+        print 'result shape:',result.shape
+        result = result.reshape((img_cols,img_rows))*100000
+        result = np.uint8(result)
+        result = np.float32(result < 4)
+        
+        if len(result.shape) > 1 or result.size > 1:
+            ds_num,ds_list = count_diff_pixel_values(result, img_cols, img_rows)
+            #result_img = Image.fromarray(result, mode='P')
+            #result_img.palette = label.palette
+            # result_img = result_img.resize(label_size, resample=Image.BILINEAR)
+            #result_img = result_img.crop((pad_w / 2, pad_h / 2, pad_w / 2 + img_w, pad_h / 2 + img_h))
+            print 'showing result img...'
+            print 'ds len:', ds_num, '\nds',ds_list
+            cv2.imshow('result',result)
+            cv2.waitKey()
+
+'''
+/usr/bin/python2.7 /home/haiyan/Documents/MA/src/seg_k_resnet_finet_cust.py
+Using TensorFlow backend.
+predict class for input image: /home/mview_im_2.jpg
+tf backend
+673
+top  17  results:
+[(673, 'mouse, computer mouse', 0.22431201),
+ (508, 'computer keyboard, keypad', 0.11738552),
+ (810, 'space bar', 0.11240823),
+ (555, 'fire engine, fire truck', 0.10910992),
+ (527, 'desktop computer', 0.066767879),
+ (592, 'hard disc, hard disk, fixed disk', 0.06549821),
+ (526, 'desk', 0.045161083),
+ (620, 'laptop, laptop computer', 0.044927225),
+ (782, 'screen, CRT screen', 0.023167523),
+ (407, 'ambulance', 0.022458438),
+ (613, 'joystick', 0.021754038),
+ (754, 'radio, wireless', 0.016762352),
+ (664, 'monitor', 0.016572531),
+ (662, 'modem', 0.012754594),
+ (487,
+  'cellular telephone, cellular phone, cellphone, cell, mobile phone',
+  0.012655553),
+ (681, 'notebook, notebook computer', 0.0081210714),
+ (878, 'typewriter keyboard', 0.0079122446)]
+
+Process finished with exit code 0
+
+
+predict class for input image: /home/pass_cv_170.png
+tf backend
+527
+top  17  results:
+[(527, 'desktop computer', 0.57437587),
+ (526, 'desk', 0.12385658),
+ (673, 'mouse, computer mouse', 0.055109248),
+ (508, 'computer keyboard, keypad', 0.035219599),
+ (754, 'radio, wireless', 0.033330429),
+ (851, 'television, television system', 0.018764967),
+ (859, 'toaster', 0.016960416),
+ (664, 'monitor', 0.014260842),
+ (782, 'screen, CRT screen', 0.010890127),
+ (487,
+  'cellular telephone, cellular phone, cellphone, cell, mobile phone',
+  0.010050085),
+ (742, 'printer', 0.010039404),
+ (662, 'modem', 0.0094371298),
+ (811, 'space heater', 0.0087464582),
+ (620, 'laptop, laptop computer', 0.0083988979),
+ (648, 'medicine chest, medicine cabinet', 0.0054554669),
+ (651, 'microwave, microwave oven', 0.0050130067),
+ (534, 'dishwasher, dish washer, dishwashing machine', 0.0030678867)]
+ 
+predict class for input image: /home/haiyan/Documents/MA/Data/MA_cad/training/others/3images_gimp/cad_6c_gimp_unten_im_1.jpg
+top  17  results:
+[(754, 'radio, wireless', 0.16323669),
+ (531, 'digital watch', 0.11538029),
+ (771, 'safe', 0.071335547),
+ (464, 'buckle', 0.06927444),
+ (673, 'mouse, computer mouse', 0.051207211),
+ (555, 'fire engine, fire truck', 0.04733441),
+ (530, 'digital clock', 0.046402242),
+ (526, 'desk', 0.031383526),
+ (848, 'tape player', 0.029937403),
+ (527, 'desktop computer', 0.027592415),
+ (485, 'CD player', 0.01908857),
+ (613, 'joystick', 0.018966267),
+ (508, 'computer keyboard, keypad', 0.018240508),
+ (844, 'switch, electric switch, electrical switch', 0.01707375),
+ (592, 'hard disc, hard disk, fixed disk', 0.017029967),
+ (664, 'monitor', 0.016553467),
+ (550, 'espresso maker', 0.016048754)]
+
+
+top  17  results:
+[(664, 'monitor', 0.23635551),
+ (662, 'modem', 0.23511408),
+ (782, 'screen, CRT screen', 0.13950124),
+ (754, 'radio, wireless', 0.12071997),
+ (527, 'desktop computer', 0.074490041),
+ (688, 'oscilloscope, scope, cathode-ray oscilloscope, CRO', 0.061485853),
+ (844, 'switch, electric switch, electrical switch', 0.02925569),
+ (742, 'printer', 0.02598675),
+ (848, 'tape player', 0.014087714),
+ (673, 'mouse, computer mouse', 0.01173712),
+ (508, 'computer keyboard, keypad', 0.0058589722),
+ (485, 'CD player', 0.0045290343),
+ (613, 'joystick', 0.0042934176),
+ (713, 'photocopier', 0.0040861866),
+ (745, 'projector', 0.003451003),
+ (482, 'cassette player', 0.0034430379),
+ (681, 'notebook, notebook computer', 0.0028268821)]
+ 
+ predict class for input image: /home/haiyan/Documents/MA/Data/MA_cad/training/others/3images_gimp/cad_6c_gimp_hinten_tranbg_im_2.jpg
+tf backend
+637
+top  17  results:
+[(637, 'mailbox, letter box', 0.98504376),
+ (553, 'file, file cabinet, filing cabinet', 0.0030017162),
+ (480,
+  'cash machine, cash dispenser, automated teller machine, automatic teller machine, automated teller, automatic teller, ATM',
+  0.0021258516),
+ (412,
+  'ashcan, trash can, garbage can, wastebin, ash bin, ash-bin, ashbin, dustbin, trash barrel, trash bin',
+  0.0021095474),
+ (742, 'printer', 0.0012988182),
+ (410, 'apiary, bee house', 0.0011658674),
+ (595, 'harvester, reaper', 0.00060003897),
+ (713, 'photocopier', 0.0004116059),
+ (886, 'vending machine', 0.00034571986),
+ (640, 'manhole cover', 0.00021811276),
+ (778, 'scale, weighing machine', 0.00018645839),
+
+######################################################
+from keras.applications.resnet50 import ResNet50
+from keras.preprocessing import image
+from keras.applications.resnet50 import preprocess_input, decode_predictions
+import numpy as np
+
+model = ResNet50(weights='imagenet')
+
+img_path = '../elephant.jpg'
+# img_path = '../Data/MA_cad/training/2images_6cl/cad_6c_im_086.jpg'
+img = image.load_img(img_path, target_size=(224, 224))
+x = image.img_to_array(img)
+x = np.expand_dims(x, axis=0)
+x = preprocess_input(x)
+
+preds = model.predict(x)
+# decode the results into a list of tuples (class, description, probability)
+# (one such list for each sample in the batch)
+print('Predicted:', decode_predictions(preds, top=3)[0])
+# Predicted: [(u'n02504013', u'Indian_elephant', 0.82658225), (u'n01871265', u'tusker', 0.1122357), (u'n02504458', u'African_elephant', 0.061040461)]
+# ('Predicted:', [(u'n02504458', u'African_elephant', 0.7645973), (u'n01871265', u'tusker', 0.16502587), (u'n02504013', u'Indian_elephant', 0.063773915)])
+'''
