@@ -1176,7 +1176,14 @@ def get_bounding_box(conture, img=None,draw_box=False):
 	cv2.waitKey(2)
 	return (x, y, w, h)
 
-def get_bounding_box_with_limit(bin_im_cv,draw_box=False):
+def get_bounding_box_with_limit(bin_im_cv, img_view, draw_box=False):
+	"""
+  Get bounding box specification with limited boundary.
+  - calc median of each side
+  - get box as per calculated values
+  :param bin_im_cv: binary cv2 image
+  :param draw_box: True/False, draw bounding box
+  """
 	im_pil = bin_im_cv.copy()
 	if len(bin_im_cv.shape) == 3:
 		im_pil = cv2.cvtColor(bin_im_cv, cv2.COLOR_BGR2RGB)
@@ -1187,7 +1194,6 @@ def get_bounding_box_with_limit(bin_im_cv,draw_box=False):
 	if FLAGS.INFO_0:
 		print 'w,h:', w, h
 	wh_count, t, b, l, r = 0, 0, 0, 0, 0
-	ts, bs, ls, rs = [], [], [], [] #tmp
 	t_counts, b_counts, l_counts, r_counts = [], [], [], []
 	limit = 1
 	set_break = False  # t
@@ -1228,7 +1234,7 @@ def get_bounding_box_with_limit(bin_im_cv,draw_box=False):
 	limit = np.median(sorted(b_counts))
 	if FLAGS.DEBUG:
 		print 'limit b', limit
-	# b_mean = np
+	
 	set_break = False  # b
 	for y in xrange(h):
 		wh_count = 0
@@ -1304,8 +1310,10 @@ def get_bounding_box_with_limit(bin_im_cv,draw_box=False):
 		print 't,b,l,r', t, ',', b, ',', l, ',', r
 	x, y, bw, bh = l, t, (r - l), (b - t)
 	if draw_box:
-		cv2.rectangle(bin_im_cv, (x, y), (x + w, y + h), (0, 255, 0), 2)
-	return x,y,bw,bh
+		cv2.rectangle(img_view, (x, y), (x + w, y + h), (0, 255, 0), 2)
+	return x, y, bw, bh
+
+
 
 def get_rgb_roi(roi_bin, base_img, w, h):
 	roi_gray = cv2.cvtColor(roi_bin, cv2.COLOR_BGR2RGB)
@@ -1368,25 +1376,28 @@ def get_roi_with_white_bg(blackbg, base_img, cont, w, h, set_limit=False):
 	
 	return x, y, bw, bh, screen_out, open_cv_image_wh
 
-def get_roi_with_white_bg_cut(roi_bin, base_img, w, h, cont,factor=1,set_limit=True):
+
+def get_roi_with_white_bg_cut(roi_bin, img_view, cont, set_limit=True):
 	"""
   Get RGB ROI with white background.
-  The ROI is cut region from RGB input image.
-  Set limit can remove some extremely irregular outliers.
+  - The ROI is cut region from RGB input image.
+  - Set limit can remove some extremely irregular outliers.
   :param roi_bin: predicted mask, to be converted to binary -
   :param base_img: RGB input
   :param cont: contours
   :param set_limit: True/False, set limit to boundary
+  return:
+   x, y, box_w, box_h: bounding box specification
+   screen_out: True/False, found ROI
   """
-	#cv2.imwrite('../roi.png',roi)
-	ret,mask = cv2.threshold(roi_bin,254,255,cv2.THRESH_BINARY_INV)
+	ret, mask = cv2.threshold(roi_bin, 254, 255, cv2.THRESH_BINARY_INV)
 	if set_limit:
-		x, y, box_w, box_h = get_bounding_box_with_limit(mask,draw_box=False)  # x,y:top-left coord mask
+		x, y, box_w, box_h = get_bounding_box_with_limit(mask, img_view, draw_box=False)  # x,y:top-left coord mask
 	else:
-		x, y, box_w, box_h = get_bounding_box(cont,draw_box=False)  # x,y:top-left coord mask
-
+		x, y, box_w, box_h = get_bounding_box(cont, img_view, draw_box=False)  # x,y:top-left coord mask
+	
 	if FLAGS.DEBUG:
-		print 'get_white_cut,size',roi_bin.shape,'base size',base_img.shape
+		print 'get_white_cut,size', roi_bin.shape, 'img_view size', img_view.shape
 	if box_w > 3 and box_h > 3:
 		screen_out = True
 		if FLAGS.INFO_0:
@@ -1395,6 +1406,7 @@ def get_roi_with_white_bg_cut(roi_bin, base_img, w, h, cont,factor=1,set_limit=T
 		screen_out = False
 		x, y, box_w, box_h = 0, 0, 0, 0
 	return x, y, box_w, box_h, screen_out
+
 
 def ROI(pred_thresh, im_crop, w, h, im_i=0, save_file=False):
 	"""
