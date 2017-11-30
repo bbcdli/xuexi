@@ -4086,3 +4086,52 @@ Return the correlation distance be1tween the histograms. This is 'normalized' so
 	
 	return cv2.compareHist(i1histbin, i2histbin, 0)
 
+
+#from PIL import Image
+#from random import randint
+#import os
+#PROJ_DIR = '/home/haiyan/Documents/A/'
+#data_path = PROJ_DIR + 'Test_Images/'
+#batch_size = 32
+#patch_s = 512
+#ch = 3
+#list_ims = [s for s in os.listdir(data_path) if '.jpg' in s]
+
+
+def rnd_crop(im,w,h,patch_s):
+  rnd_h, rnd_w = randint(1,h-patch_s), randint(1,w-patch_s)
+  bbox = (rnd_w, rnd_h, rnd_w + patch_s, rnd_h + patch_s)
+  return im.crop(bbox)
+
+
+def get_batch(data_path,batch_list,ch,patch_s):
+  images_np = np.zeros((len(batch_list), ch, patch_s, patch_s))
+  for i, im in zip(xrange(len(batch_list)),list_ims):
+    img = Image.open(data_path+im)
+    w, h = img.size
+    img = rnd_crop(img,w,h,patch_s)
+    img = np.asarray(img)
+    img = img.reshape(ch,patch_s,patch_s)
+    images_np[i,:,:,:] = img
+  return images_np
+
+
+def create_batch_list(list_ims,batch_size,b_list):
+  b_s, b_e = 0, batch_size
+  for b in xrange(int(len(list_ims)/batch_size)):
+    batch_list = list_ims[b_s : b_e]
+    b_list.append(batch_list)
+    b_s = b_e
+    b_e = b_s+batch_size
+  return b_list
+
+
+#use
+#b_list = []
+#batch_list = create_batch_list(list_ims,batch_size,b_list)
+#if len(batch_list)>0:
+#  for ba in batch_list:
+#    images_np = get_batch(data_path,ba,ch,patch_s)
+#    print 'shape of each batch:', images_np.shape
+#else:
+#  print 'no enough data'
