@@ -4135,3 +4135,38 @@ def create_batch_list(list_ims,batch_size,b_list):
 #    print 'shape of each batch:', images_np.shape
 #else:
 #  print 'no enough data'
+
+
+abel_dict = {}
+img_size = (224*2, 224*2)
+cells = 7
+
+#for parsing xml file
+def get_obj_coordinate(obj):
+    global label_dict
+    class_name = obj.find("name").text.strip()
+    if label_dict.get(class_name, None) is None:
+        label_dict[class_name] = len(label_dict)
+    class_id = label_dict[class_name]
+    bbox = obj.find("bndbox")
+    xmax = float(bbox.find("xmax").text.strip())
+    xmin = float(bbox.find("xmin").text.strip())
+    ymax = float(bbox.find("ymax").text.strip())
+    ymin = float(bbox.find("ymin").text.strip())
+    w = xmax - xmin
+    h = ymax - ymin
+    x = xmin + w/2
+    y = ymin + h/2
+    return class_id, x, y, w, h
+
+def get_img_info(filename):
+    tree = ElementTree.parse(filename)
+    node = tree.getroot()
+    file_name = node.find("filename").text.strip()
+    img_h = float(node.find("size").find("height").text.strip())
+    img_w = float(node.find("size").find("width").text.strip())
+    obj_list = node.findall("object")
+    objects = []
+    for obj in obj_list:
+        objects.append(get_obj_coordinate(obj))
+    return file_name, img_w, img_h, objects
