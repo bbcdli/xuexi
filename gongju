@@ -4141,7 +4141,7 @@ abel_dict = {}
 img_size = (224*2, 224*2)
 cells = 7
 
-#for parsing xml file
+#for parsing xml file  http://www.renom.jp/notebooks/image_processing/yolo/notebook.html
 def get_obj_coordinate(obj):
     global label_dict
     class_name = obj.find("name").text.strip()
