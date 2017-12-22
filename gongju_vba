@@ -1,0 +1,343 @@
+'========================================================
+'Created by h Li 2014
+'This Sub pick out the log result for F7 and F8 from S.M.A.R.T. log file with standard
+'name format 2014-09...
+'File name with 01 to 09 can be read.
+'File names from 01 to 19 can be read continually
+'Automatically update final F7F8 "do not overwrite"sheet
+'D:\Excel VBA Read Text File\read_file\
+' Activate the worksheet "log" and run this Sub.
+'========================================================
+
+Sub F7F8_reader_v4()
+    Dim i As Integer, j As Integer, k As Integer, F7_line_number As Integer
+    Dim Startnumber As Integer, Endnumber As Integer
+    Dim filepath As String, filename As String
+    
+    ' ! User Input !
+    ' Set file path, start date, end date and line number of key F7
+    filepath = "L:\"
+    ' ! User Input !
+    Startnumber = 19
+    ' ! User Input !
+    Endnumber = 25
+    ' ! User Input !
+    F7_line_number = 73
+    
+    
+    
+    Application.ScreenUpdating = False
+    k = Startnumber - 1
+    
+    For i = Startnumber To Endnumber
+    j = (i - k) * 2 - 1
+    If i < 10 Then
+    ' ! User Input !
+    ' Set prefix of log file name
+    filename = "2014-09-0"
+    Else
+    filename = "2014-09-"
+    End If
+        
+    ' ***************************************************************************
+    '       From here below to the end of this code no need to change
+    ' ***************************************************************************
+    
+    ' Set connection
+    ConnectionString = "TEXT;" + filepath + filename & i & ".txt"
+    
+'
+    With ActiveSheet.QueryTables.Add(Connection:=ConnectionString, Destination:=Range("$A" & j))
+        .Name = filename & i
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .RefreshStyle = xlDeleteIntertCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = False
+        .RefreshPeriod = 0
+        .TextFilePromptOnRefresh = False
+        .TextFilePlatform = 437
+        .TextFileStartRow = F7_line_number
+        .TextFileParseType = xlDelimited
+        .TextFileTextQualifier = xlTextQualifierDoubleQuote
+        .TextFileConsecutiveDelimiter = False
+        .TextFileTabDelimiter = True
+        .TextFileSemicolonDelimiter = False
+        .TextFileCommaDelimiter = False
+        .TextFileSpaceDelimiter = True
+        .TextFileColumnDataTypes = Array(1, 1, 1, 1, 1, 1)
+        .TextFileTrailingMinusNumbers = True
+        .Refresh BackgroundQuery:=False
+    End With
+    Range("$e" & j).Select
+    Next i
+    'Range("$A & (j + 2): $U & (j+200)").Select
+    k = j + 400
+    Range("$A" & j + 2, "$A" & k).EntireRow.Clear
+    Range("B:D").EntireColumn.Delete
+    Range("C:T").EntireColumn.Delete
+    Columns("A:B").EntireColumn.AutoFit
+    Application.ScreenUpdating = True
+    Sheets("do not overwrite").Select
+    Range("F2").Select
+    ActiveCell.FormulaR1C1 = "=log!R[-1]C[-4]"
+    Selection.AutoFill Destination:=Range("F2:F40"), Type:=xlFillDefault
+    Range("a2:b40").Select
+End Sub
+
+'========================================================
+'DESIGNED & CODED BY LOEBLCOM SERVICES 2013
+'ERIK LOEBL(713)409-7041
+'EMAIL: erik@loeblcomservices.com
+'WEB:   http://loeblcomservices.com
+'modified by L, read s.m.a.r.t. key
+'========================================================
+
+
+Sub query_text_file()
+    
+    'PURPOSE: Query A Text File
+    
+    '*************************************
+    'clear 'Text File Contents' worksheet
+    '*************************************
+    Worksheets("Text File Contents").Select
+    Range("A2:K6500").Clear
+    
+    '*************************************
+    'now populate copy the orders over
+    '*************************************
+    
+    Dim strPath As String
+    
+    'Need to reference the:
+    '   Microsoft ActiveX Data Objects 2.5 Library
+    Dim s_rst As ADODB.Recordset
+    Dim s_cnn As ADODB.Connection 's for sub connection
+    Dim intRow As Integer
+    
+    Const adOpenStatic = 3
+    Const adLockOptimistic = 3
+    Const adCmdText = &H1
+   
+    Set s_cnn = New ADODB.Connection
+
+    strToolWkbk = "read_file1.csv"
+    strPath = "D:\Excel VBA Read Text File" & "\read_file"
+
+    Debug.Print strPath
+    
+    
+    'For a text file, Data Source is the folder, not the file
+    s_cnn = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" & strPath & ";" _
+    & "Extended Properties=""text;HDR=No;FMT=Delimited""; "
+    
+    s_cnn.Open
+    Set s_rst = New ADODB.Recordset
+    
+
+    strSQL = "SELECT * FROM " & strToolWkbk
+
+        
+    s_rst.Open strSQL, _
+        s_cnn, adOpenStatic, adLockOptimistic, adCmdText
+
+    intRow = 1
+    
+    s_rst.MoveFirst
+    
+
+    Do Until s_rst.EOF
+        Range("A" & intRow) = s_rst(0)
+        Range("B" & intRow) = s_rst(1)
+        Range("C" & intRow) = s_rst(2)
+        Range("D" & intRow) = s_rst(3)
+        Range("E" & intRow) = s_rst(4)
+        Range("F" & intRow) = s_rst(5)
+        Range("G" & intRow) = s_rst(6)
+        Range("H" & intRow) = s_rst(7)
+        Range("I" & intRow) = s_rst(8)
+        Range("J" & intRow) = s_rst(9)
+
+        intRow = intRow + 1
+        s_rst.MoveNext
+    Loop
+    
+    Range("A:J").Select
+    Selection.NumberFormat = "General"
+    
+        
+       
+    s_rst.Close
+    s_cnn.Close
+    
+    Set s_rst = Nothing
+    Set s_cnn = Nothing
+        
+
+End Sub
+'========================================================
+'straightSample can open csv or txt file
+'it can display space separated file
+'all properties must be defined
+'
+'modified by L, read s.m.a.r.t. key
+'========================================================
+
+Sub straightSample()
+    With ActiveSheet.QueryTables.Add(Connection:= _
+        "TEXT;D:\read_file1.csv", Destination:=Range("$A$1") _
+        )
+        .Name = "read_file1"
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .RefreshStyle = xlInsertDeleteCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = True
+        .RefreshPeriod = 0
+        .TextFilePromptOnRefresh = False
+        .TextFilePlatform = 437
+        .TextFileStartRow = 1
+        .TextFileParseType = xlDelimited
+        .TextFileTextQualifier = xlTextQualifierDoubleQuote
+        .TextFileConsecutiveDelimiter = False
+        .TextFileTabDelimiter = True
+        .TextFileSemicolonDelimiter = False
+        .TextFileCommaDelimiter = False
+        .TextFileSpaceDelimiter = True
+        .TextFileColumnDataTypes = Array(1, 1, 1, 1, 1, 1)
+        .TextFileTrailingMinusNumbers = True
+        .Refresh BackgroundQuery:=False
+    End With
+End Sub
+'========================================================
+'fastSample can only open csv or txt file
+'it cannot display space separated file
+'
+'it opens the file in a new excel window
+'modified by L, read s.m.a.r.t. key
+'========================================================
+
+Sub fastSample()
+    Dim wbI As Workbook, wbO As Workbook
+    Dim wsI As Worksheet
+
+    Set wbI = ThisWorkbook
+    Set wsI = wbI.Sheets("Sheet1") '<~~ Sheet where you want to import
+
+    Set wbO = Workbooks.Open("D:\read_file\read_file.txt")
+
+    wbO.Sheets(1).Cells.Copy wsI.Cells
+
+    '<~~ wbO.Close SaveChanges:=False
+End Sub
+=====================
+
+
+
+Sub temp_ref()
+'
+' temp_ref Macro
+'
+
+'
+    Dim file1 As String
+    Dim file2 As String
+    Dim file3 As String
+    file1 = "2014-07-01.txt"
+    file2 = "2014-07-02.txt"
+    file3 = "2014-07-03.txt"
+    
+    With ActiveSheet.QueryTables.Add(Connection:= _
+        "TEXT;D:\read_file\" & file1 _
+        , Destination:=Range("$J$1"))
+        .Name = file1
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .RefreshStyle = xlOverwriteCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = True
+        .RefreshPeriod = 0
+        .TextFilePromptOnRefresh = False
+        .TextFilePlatform = 936
+        .TextFileStartRow = 1
+        .TextFileParseType = xlDelimited
+        .TextFileTextQualifier = xlTextQualifierDoubleQuote
+        .TextFileConsecutiveDelimiter = True
+        .TextFileTabDelimiter = True
+        .TextFileSemicolonDelimiter = False
+        .TextFileCommaDelimiter = False
+        .TextFileSpaceDelimiter = True
+        .TextFileColumnDataTypes = Array(1, 1, 1, 1, 1, 1, 1, 1)
+        .TextFileTrailingMinusNumbers = True
+        .Refresh BackgroundQuery:=False
+    End With
+    With ActiveSheet.QueryTables.Add(Connection:= _
+        "TEXT;D:\2014-07-02.txt" _
+        , Destination:=Range("$J$9"))
+        .Name = "2014-07-02"
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .RefreshStyle = xlOverwriteCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = True
+        .RefreshPeriod = 0
+        .TextFilePromptOnRefresh = False
+        .TextFilePlatform = 936
+        .TextFileStartRow = 1
+        .TextFileParseType = xlDelimited
+        .TextFileTextQualifier = xlTextQualifierDoubleQuote
+        .TextFileConsecutiveDelimiter = True
+        .TextFileTabDelimiter = True
+        .TextFileSemicolonDelimiter = False
+        .TextFileCommaDelimiter = False
+        .TextFileSpaceDelimiter = True
+        .TextFileColumnDataTypes = Array(1, 1, 1, 1, 1, 1, 1, 1)
+        .TextFileTrailingMinusNumbers = True
+        .Refresh BackgroundQuery:=False
+    End With
+    With ActiveSheet.QueryTables.Add(Connection:= _
+        "TEXT;D:\Excel VBA Read Text File\read_file\2014-07-03.txt" _
+        , Destination:=Range("$J$18"))
+        .Name = "2014-07-03"
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .RefreshStyle = xlOverwriteCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = True
+        .RefreshPeriod = 0
+        .TextFilePromptOnRefresh = False
+        .TextFilePlatform = 936
+        .TextFileStartRow = 5
+        .TextFileParseType = xlDelimited
+        .TextFileTextQualifier = xlTextQualifierDoubleQuote
+        .TextFileConsecutiveDelimiter = True
+        .TextFileTabDelimiter = True
+        .TextFileSemicolonDelimiter = False
+        .TextFileCommaDelimiter = False
+        .TextFileSpaceDelimiter = True
+        .TextFileColumnDataTypes = Array(1, 1, 1, 1, 1, 1, 1, 1)
+        .TextFileTrailingMinusNumbers = True
+        .Refresh BackgroundQuery:=False
+    End With
+End Sub
