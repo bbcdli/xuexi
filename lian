@@ -3164,7 +3164,7 @@ with tf.Session(graph=tf.Graph()) as sess:
     print 'model file found'
     saver = tf.train.Saver()
     variables_to_restore = []
-    vars = [v for v in tf.trainable_variables('var_name')]
+    vars = [v for v in tf.trainable_variables('var_name')] #'var_name' is a namescape defined by user previously
     print 'ori vars:', vars
     saver.restore(sess,ckpt.model_checkpoint_path)
     print 'saver restored'
@@ -3172,7 +3172,8 @@ with tf.Session(graph=tf.Graph()) as sess:
 print 'variable to restore:', variables_to_restore
 
 
-
+#search, find name: any_tensorflow_var.name.endwith  
+#eg [v.name for v in tf.trainable_variables('var_name') if v.name.endwith('x')]
 
 
 
