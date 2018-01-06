@@ -3139,14 +3139,15 @@ checkpoint_dir = PROJ_DIR+'models/'
 
 checkpoint_exclude_scopes=["var_name/wd1", "var_name/wd2", 'var_name/out','var_name/bd1','var_name/bd2','var_name/bout']
 
-exclusions = [scope.strip() for scope in checkpoint_exclude_scopes]
 
-def get_vars_to_restore():
+def get_vars_to_restore(vars,checkpoint_exclude_scopes):
+  variables_to_restore = []
+  exclusions = [scope.strip() for scope in checkpoint_exclude_scopes]
   for var in vars:
-    print 'var in vars',var
+    #print 'var in vars',var
     excluded = False
     for exclusion in exclusions:
-      print 'exclusion:',exclusion
+      #print 'exclusion:',exclusion
       if var.op.name.startswith(exclusion):
           excluded = True
           break
@@ -3163,13 +3164,15 @@ with tf.Session(graph=tf.Graph()) as sess:
   if ckpt:
     print 'model file found'
     saver = tf.train.Saver()
-    variables_to_restore = []
-    vars = [v for v in tf.trainable_variables('var_name')] #'var_name' is a namescape defined by user previously
+
+    vars = [v for v in tf.trainable_variables('var_name')]
     print 'ori vars:', vars
+    variables_to_restore = get_vars_to_restore(vars,checkpoint_exclude_scopes)
+    print 'variable to restore:', variables_to_restore
+
     saver.restore(sess,ckpt.model_checkpoint_path)
     print 'saver restored'
-    variables_to_restore = get_vars_to_restore()
-print 'variable to restore:', variables_to_restore
+
 
 
 #search, find name: any_tensorflow_var.name.endwith  
