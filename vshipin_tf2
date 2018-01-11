@@ -1,0 +1,938 @@
+#input_data.py
+# Copyright 2015 Google Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""Functions for downloading and reading MNIST data."""
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+import os
+from six.moves import xrange  # pylint: disable=redefined-builtin
+import tensorflow as tf
+import PIL.Image as Image
+import random
+import numpy as np
+import cv2
+import time
+#def get_frames_data(filenames, num_frames_per_clip=16):
+def get_frames_data(lkdir, num_frames_per_clip=16):
+  ''' Given a directory containing extracted frames, return a video clip of
+  (num_frames_per_clip) consecutive frames as a list of np arrays '''
+  ret_arr = []
+  s_index = 0
+  #print ('len of files',len(filenames),', filenames:',filenames[-10:])
+  for dir, subdir, filenames in os.walk(lkdir):
+    if(len(filenames)<num_frames_per_clip):
+      return [], s_index
+    #filenames = sorted(filenames)
+    s_index = random.randint(0, len(filenames) - num_frames_per_clip)
+    for i in range(s_index, s_index + num_frames_per_clip):
+      image_name = str(dir) + '/' + str(filenames[i])
+      img = Image.open(image_name)
+      img_data = np.array(img)
+      ret_arr.append(img_data)
+  return ret_arr, s_index
+def read_clip_and_label(filename, batch_size, start_pos=-1, num_frames_per_clip=16, crop_size=112, shuffle=False):
+  lines = open(filename,'r')
+  read_dirnames = []
+  data = []
+  label = []
+  batch_index = 0
+  next_batch_start = -1
+  lines = list(lines)
+  np_mean = np.load('crop_mean.npy').reshape([num_frames_per_clip, crop_size, crop_size, 3])
+  # Forcing shuffle, if start_pos is not specified
+  if start_pos < 0:
+    shuffle = True
+  if shuffle:
+    video_indices = range(len(lines))
+    random.seed(time.time())
+    random.shuffle(video_indices)
+  else:
+    # Process videos sequentially
+    video_indices = range(start_pos, len(lines))
+  for index in video_indices:
+    if(batch_index>=batch_size):
+      next_batch_start = index
+      #print 'batch > batch_size, break'
+      break
+    #split line by ' '
+    line = lines[index].strip('\n').split()
+    dir,tail = os.path.split(line[0])
+    tmp_label = line[1]
+    if not shuffle:
+      #print("Loading a video clip from {}...".format(dir))
+      pass #hy
+   
+    tmp_data, _ = get_frames_data(dir, num_frames_per_clip)
+    #print ('got frames data, len data', len(tmp_data))
+    img_datas = [];
+    if(len(tmp_data)!=0):
+      for j in xrange(len(tmp_data)):
+        img = Image.fromarray(tmp_data[j].astype(np.uint8))
+        if(img.width>img.height):
+          scale = float(crop_size)/float(img.height)
+          img = np.array(cv2.resize(np.array(img),(int(img.width * scale + 1), crop_size))).astype(np.float32)
+        else:
+          scale = float(crop_size)/float(img.width)
+          img = np.array(cv2.resize(np.array(img),(crop_size, int(img.height * scale + 1)))).astype(np.float32)
+        crop_x = int((img.shape[0] - crop_size)/2)
+        crop_y = int((img.shape[1] - crop_size)/2)
+        img = img[crop_x:crop_x+crop_size, crop_y:crop_y+crop_size,:] - np_mean[j]
+        img_datas.append(img)
+      data.append(img_datas)
+      label.append(int(tmp_label))
+      batch_index = batch_index + 1
+      read_dirnames.append(dir)
+  # pad (duplicate) data/label if less than batch_size
+  valid_len = len(data)
+  pad_len = batch_size - valid_len
+  if pad_len:
+    for i in range(pad_len):
+      data.append(img_datas)
+      label.append(int(tmp_label))
+  np_arr_data = np.array(data).astype(np.float32)
+  np_arr_label = np.array(label).astype(np.int64)
+  return np_arr_data, np_arr_label, next_batch_start, read_dirnames, valid_len
+
+#model c3d_model.py
+# Copyright 2015 Google Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""Builds the C3D network.
+Implements the inference pattern for model building.
+inference_c3d(): Builds the model as far as is required for running the network
+forward to make predictions.
+"""
+import tensorflow as tf
+# The UCF-101 dataset has 101 classes
+NUM_CLASSES = 2#2#101
+# Images are cropped to (CROP_SIZE, CROP_SIZE)
+CROP_SIZE = 112
+CHANNELS = 3
+# Number of frames per video clip
+NUM_FRAMES_PER_CLIP = 16
+"-----------------------------------------------------------------------------------------------------------------------"
+def conv3d(name, l_input, w, b):
+  return tf.nn.bias_add(
+          tf.nn.conv3d(l_input, w, strides=[1, 1, 1, 1, 1], padding='SAME'),
+          b
+          )
+def max_pool(name, l_input, k):
+  return tf.nn.max_pool3d(l_input, ksize=[1, k, 2, 2, 1], strides=[1, k, 2, 2, 1], padding='SAME', name=name)
+def inference_c3d_2l(_X, _dropouts, batch_size, _weights, _biases):
+  # Convolution Layer
+  conv1 = conv3d('conv1', _X, _weights['wc1'], _biases['bc1'])
+  conv1 = tf.nn.relu(conv1, 'relu1')
+  pool1 = max_pool('pool1', conv1, k=1)
+  pool1 = tf.nn.dropout(pool1,_dropouts[0])
+  # Convolution Layer
+  conv2 = conv3d('conv2', pool1, _weights['wc2'], _biases['bc2'])
+  conv2 = tf.nn.relu(conv2, 'relu2')
+  pool2 = max_pool('pool2', conv2, k=2)
+  pool2 = tf.nn.dropout(pool2,_dropouts[1])
+  print 'pool2 shape', pool2.get_shape()
+  # Fully connected layer
+  #pool2 = tf.transpose(pool2, perm=[0,1,4,2,3])
+  #print 'pool2 transpose',pool2.get_shape()
+  dense1 = tf.reshape(pool2, [batch_size, _weights['wd1'].get_shape().as_list()[0]]) # Reshape conv3 output to fit dense layer input
+  print 'dense1', dense1.get_shape()
+  dense1 = tf.matmul(dense1, _weights['wd1']) + _biases['bd1']
+  dense1 = tf.nn.relu(dense1, name='fc1') # Relu activation
+  dense1 = tf.nn.dropout(dense1, _dropouts[2])
+  dense2 = tf.nn.relu(tf.matmul(dense1, _weights['wd2']) + _biases['bd2'], name='fc2') # Relu activation
+  dense2 = tf.nn.dropout(dense2, _dropouts[3])
+  # Output: class prediction
+  out = tf.matmul(dense2, _weights['out']) + _biases['bout']
+  return out
+
+def inference_c3d(_X, _dropout, batch_size, _weights, _biases):
+
+
+  # Convolution Layer
+  conv1 = conv3d('conv1', _X, _weights['wc1'], _biases['bc1'])
+  conv1 = tf.nn.relu(conv1, 'relu1')
+  pool1 = max_pool('pool1', conv1, k=1)
+
+  # Convolution Layer
+  conv2 = conv3d('conv2', pool1, _weights['wc2'], _biases['bc2'])
+  conv2 = tf.nn.relu(conv2, 'relu2')
+  pool2 = max_pool('pool2', conv2, k=2)
+  print 'pool2 shape', pool2.get_shape()
+
+
+  #'''
+  # Convolution Layer
+  conv3 = conv3d('conv3a', pool2, _weights['wc3a'], _biases['bc3a'])
+  conv3 = tf.nn.relu(conv3, 'relu3a')
+  conv3 = conv3d('conv3b', conv3, _weights['wc3b'], _biases['bc3b'])
+  conv3 = tf.nn.relu(conv3, 'relu3b')
+  pool3 = max_pool('pool3', conv3, k=2)
+  print 'pool3 shape', pool3.get_shape()
+
+  # Convolution Layer
+  conv4 = conv3d('conv4a', pool3, _weights['wc4a'], _biases['bc4a'])
+  conv4 = tf.nn.relu(conv4, 'relu4a')
+  conv4 = conv3d('conv4b', conv4, _weights['wc4b'], _biases['bc4b'])
+  conv4 = tf.nn.relu(conv4, 'relu4b')
+  pool4 = max_pool('pool4', conv4, k=2)
+  print 'pool4 shape', pool4.get_shape()
+
+  # Convolution Layer
+  conv5 = conv3d('conv5a', pool4, _weights['wc5a'], _biases['bc5a'])
+  conv5 = tf.nn.relu(conv5, 'relu5a')
+  conv5 = conv3d('conv5b', conv5, _weights['wc5b'], _biases['bc5b'])
+  conv5 = tf.nn.relu(conv5, 'relu5b')
+  pool5 = max_pool('pool5', conv5, k=2)
+  print pool5.get_shape()
+  print 'pool5 shape', pool5.get_shape()
+  # Fully connected layer
+  pool5 = tf.transpose(pool5, perm=[0,1,4,2,3])
+  #'''
+  # Fully connected layer
+  #pool2 = tf.transpose(pool2, perm=[0,1,4,2,3])
+  #print 'pool2 transpose',pool2.get_shape()
+  dense1 = tf.reshape(pool5, [batch_size, _weights['wd1'].get_shape().as_list()[0]]) # Reshape conv3 output to fit dense layer input
+  print 'dense1', dense1.get_shape()
+  dense1 = tf.matmul(dense1, _weights['wd1']) + _biases['bd1']
+
+  dense1 = tf.nn.relu(dense1, name='fc1') # Relu activation
+  dense1 = tf.nn.dropout(dense1, _dropout)
+
+  dense2 = tf.nn.relu(tf.matmul(dense1, _weights['wd2']) + _biases['bd2'], name='fc2') # Relu activation
+  dense2 = tf.nn.dropout(dense2, _dropout)
+
+  # Output: class prediction
+  out = tf.matmul(dense2, _weights['out']) + _biases['bout']
+
+  return out
+
+
+def inference_c3d_ori(_X, _dropout, batch_size, _weights, _biases):
+
+  # Convolution Layer
+  conv1 = conv3d('conv1', _X, _weights['wc1'], _biases['bc1'])
+  conv1 = tf.nn.relu(conv1, 'relu1')
+  pool1 = max_pool('pool1', conv1, k=1)
+
+  # Convolution Layer
+  conv2 = conv3d('conv2', pool1, _weights['wc2'], _biases['bc2'])
+  conv2 = tf.nn.relu(conv2, 'relu2')
+  pool2 = max_pool('pool2', conv2, k=2)
+
+  # Convolution Layer
+  conv3 = conv3d('conv3a', pool2, _weights['wc3a'], _biases['bc3a'])
+  conv3 = tf.nn.relu(conv3, 'relu3a')
+  conv3 = conv3d('conv3b', conv3, _weights['wc3b'], _biases['bc3b'])
+  conv3 = tf.nn.relu(conv3, 'relu3b')
+  pool3 = max_pool('pool3', conv3, k=2)
+
+  # Convolution Layer
+  conv4 = conv3d('conv4a', pool3, _weights['wc4a'], _biases['bc4a'])
+  conv4 = tf.nn.relu(conv4, 'relu4a')
+  conv4 = conv3d('conv4b', conv4, _weights['wc4b'], _biases['bc4b'])
+  conv4 = tf.nn.relu(conv4, 'relu4b')
+  pool4 = max_pool('pool4', conv4, k=2)
+
+  # Convolution Layer
+  conv5 = conv3d('conv5a', pool4, _weights['wc5a'], _biases['bc5a'])
+  conv5 = tf.nn.relu(conv5, 'relu5a')
+  conv5 = conv3d('conv5b', conv5, _weights['wc5b'], _biases['bc5b'])
+  conv5 = tf.nn.relu(conv5, 'relu5b')
+  pool5 = max_pool('pool5', conv5, k=2)
+  print pool5.get_shape()
+
+  # Fully connected layer
+  pool5 = tf.transpose(pool5, perm=[0,1,4,2,3])
+  print pool5.get_shape()
+  dense1 = tf.reshape(pool5, [batch_size, _weights['wd1'].get_shape().as_list()[0]]) # Reshape conv3 output to fit dense layer input
+  print dense1.get_shape()
+  dense1 = tf.matmul(dense1, _weights['wd1']) + _biases['bd1']
+
+  dense1 = tf.nn.relu(dense1, name='fc1') # Relu activation
+  dense1 = tf.nn.dropout(dense1, _dropout)
+
+  dense2 = tf.nn.relu(tf.matmul(dense1, _weights['wd2']) + _biases['bd2'], name='fc2') # Relu activation
+  dense2 = tf.nn.dropout(dense2, _dropout)
+
+  # Output: class prediction
+  out = tf.matmul(dense2, _weights['out']) + _biases['out']
+
+  return out
+
+#eva
+# Copyright 2015 Google Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""Trains and Evaluates the MNIST network using a feed dictionary."""
+# pylint: disable=missing-docstring
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+import os.path
+import time
+from six.moves import xrange  # pylint: disable=redefined-builtin
+import tensorflow as tf
+import input_data
+import c3d_model
+import numpy as np
+# Basic model parameters as external flags.
+flags = tf.app.flags
+gpu_num = 1
+flags.DEFINE_integer('batch_size', 1 , 'Batch size.')
+FLAGS = flags.FLAGS
+PROJ_DIR = '/home/hy/Documents/aggr/c3d-tf/'
+
+def placeholder_inputs(batch_size):
+  """Generate placeholder variables to represent the input tensors.
+  These placeholders are used as inputs by the rest of the model building
+  code and will be fed from the downloaded data in the .run() loop, below.
+  Args:
+    batch_size: The batch size will be baked into both placeholders.
+  Returns:
+    images_placeholder: Images placeholder.
+    labels_placeholder: Labels placeholder.
+  """
+  # Note that the shapes of the placeholders match the shapes of the full
+  # image and label tensors, except the first dimension is now batch_size
+  # rather than the full size of the train or test data sets.
+  images_placeholder = tf.placeholder(tf.float32, shape=(batch_size,
+                                                         c3d_model.NUM_FRAMES_PER_CLIP,
+                                                         c3d_model.CROP_SIZE,
+                                                         c3d_model.CROP_SIZE,
+                                                         c3d_model.CHANNELS))
+  labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size))
+  return images_placeholder, labels_placeholder
+
+
+def _variable_on_cpu(name, shape, initializer):
+  #with tf.device('/cpu:%d' % cpu_id):
+  with tf.device('/cpu:0'):
+    var = tf.get_variable(name, shape, initializer=initializer)
+  return var
+
+def _variable_with_weight_decay(name, shape, stddev, wd):
+  var = _variable_on_cpu(name, shape, tf.truncated_normal_initializer(stddev=stddev))
+  if wd is not None:
+    weight_decay = tf.nn.l2_loss(var) * wd
+    tf.add_to_collection('losses', weight_decay)
+  return var
+
+def run_test():
+  #pre_model_name = PROJ_DIR + "models/c3d_ucf_model-1.model"
+  model_name = PROJ_DIR + "good_m/0.8_0.7/c3d_good_model_0.8_0.7-631.meta"
+  test_list_file = PROJ_DIR + 'list/test_eva.list'
+  num_test_videos = len(list(open(test_list_file,'r')))
+  print("Number of test videos={}".format(num_test_videos))
+
+  # Get the sets of images and labels for training, validation, and
+  images_placeholder, labels_placeholder = placeholder_inputs(FLAGS.batch_size * gpu_num)
+  #with tf.variable_scope('var_name') as var_scope:
+
+  use_2_layers = True
+
+  if use_2_layers:
+    with tf.variable_scope('var_name') as var_scope:
+
+      weights = {
+          'wc1': _variable_with_weight_decay('wc1', [3, 3, 3, 3, 4], 0.04, 0.00),
+          'wc2': _variable_with_weight_decay('wc2', [3, 3, 3, 4, 12], 0.04, 0.00),
+          'wd1': _variable_with_weight_decay('wd1', [75264, 128], 0.04, 0.001),
+          'wd2': _variable_with_weight_decay('wd2', [128, 2], 0.04, 0.002),
+          'out': _variable_with_weight_decay('out', [2, 2], 0.04, 0.005)
+      }
+      biases = {
+          'bc1': _variable_with_weight_decay('bc1', [4], 0.04, 0.0),
+          'bc2': _variable_with_weight_decay('bc2', [12], 0.04, 0.0),
+          'bd1': _variable_with_weight_decay('bd1', [128], 0.04, 0.0),
+          'bd2': _variable_with_weight_decay('bd2', [2], 0.04, 0.0),
+          'bout': _variable_with_weight_decay('bout', [2], 0.04, 0.0),
+      }
+
+  else:
+    with tf.variable_scope('var_name') as var_scope:
+      weights = {
+            'wc1': _variable_with_weight_decay('wc1', [3, 3, 3, 3, 64], 0.04, 0.00),
+            'wc2': _variable_with_weight_decay('wc2', [3, 3, 3, 64, 128], 0.04, 0.00),
+            'wc3a': _variable_with_weight_decay('wc3a', [3, 3, 3, 128, 256], 0.04, 0.00),
+            'wc3b': _variable_with_weight_decay('wc3b', [3, 3, 3, 256, 256], 0.04, 0.00),
+            'wc4a': _variable_with_weight_decay('wc4a', [3, 3, 3, 256, 512], 0.04, 0.00),
+            'wc4b': _variable_with_weight_decay('wc4b', [3, 3, 3, 512, 512], 0.04, 0.00),
+            'wc5a': _variable_with_weight_decay('wc5a', [3, 3, 3, 512, 512], 0.04, 0.00),
+            'wc5b': _variable_with_weight_decay('wc5b', [3, 3, 3, 512, 512], 0.04, 0.00),
+            'wd1': _variable_with_weight_decay('wd1', [8192, 4096], 0.04, 0.001),
+            'wd2': _variable_with_weight_decay('wd2', [4096, 2], 0.04, 0.002),
+            'out': _variable_with_weight_decay('out', [2, 2], 0.04, 0.005)
+            }
+    biases = {
+            'bc1': _variable_with_weight_decay('bc1', [64], 0.04, 0.0),
+            'bc2': _variable_with_weight_decay('bc2', [128], 0.04, 0.0),
+            'bc3a': _variable_with_weight_decay('bc3a', [256], 0.04, 0.0),
+            'bc3b': _variable_with_weight_decay('bc3b', [256], 0.04, 0.0),
+            'bc4a': _variable_with_weight_decay('bc4a', [512], 0.04, 0.0),
+            'bc4b': _variable_with_weight_decay('bc4b', [512], 0.04, 0.0),
+            'bc5a': _variable_with_weight_decay('bc5a', [512], 0.04, 0.0),
+            'bc5b': _variable_with_weight_decay('bc5b', [512], 0.04, 0.0),
+            'bd1': _variable_with_weight_decay('bd1', [4096], 0.04, 0.0),
+            'bd2': _variable_with_weight_decay('bd2', [2], 0.04, 0.0),
+            'bout': _variable_with_weight_decay('bout', [2], 0.04, 0.0),
+            }
+
+  logits = []
+  #for gpu_index in range(0, gpu_num):
+  gpu_index = 0
+  start = time.time()
+  with tf.device('/cpu:%d' % gpu_index):
+      #dropouts = [0.8, 0.5, 0.6, 0.4]
+      dropouts = [1, 1, 1, 1]
+
+      logit = c3d_model.inference_c3d_2l(
+          images_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size, :, :, :, :],
+          dropouts,
+          FLAGS.batch_size,
+          weights,
+          biases
+      )
+
+      #logit = c3d_model.inference_c3d_2l(
+      # images_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size,:,:,:,:],
+      # dropouts, FLAGS.batch_size, weights, biases)
+      logits.append(logit)
+
+  logits = tf.concat(logits,0)
+  norm_score = tf.nn.softmax(logits)
+  print ('got norm score')
+  saver = tf.train.Saver()
+  sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+  init = tf.global_variables_initializer()
+  sess.run(init)
+  # Create a saver for writing training checkpoints.
+  #model path_file: PROJ_DIR + "models/c3d_ucf_model-1.meta"
+  saver.restore(sess, model_name[:-5])
+  print ('restore ok')
+  # And then after everything is built, start the loop.
+  bufsize = 0
+  write_file = open("predict_ret.txt", "w+", bufsize)
+  next_start_pos = 0
+  all_steps = int((num_test_videos - 1) / (FLAGS.batch_size * gpu_num) + 1)
+  print ('time before test loop:', time.time() - start, 's')
+  for step in xrange(all_steps):
+    # Fill a feed dictionary with the actual set of images and labels
+    # for this particular training step.
+    inference_before = time.time()
+    test_images, test_labels, next_start_pos, _, valid_len = \
+            input_data.read_clip_and_label(
+                    test_list_file,
+                    FLAGS.batch_size * gpu_num,
+                    start_pos=next_start_pos
+                    )
+    predict_score = norm_score.eval(
+            session=sess,
+            feed_dict={images_placeholder: test_images}
+            )
+    for i in range(0, valid_len):
+      true_label = test_labels[i],
+      top1_predicted_label = np.argmax(predict_score[i])
+      # Write results: true label, class prob for true label, predicted label, class prob for predicted label
+      write_file.write('{}, {}, {}, {}\n'.format(
+              true_label[0],
+              predict_score[i][true_label],
+              top1_predicted_label,
+              predict_score[i][top1_predicted_label]))
+      print ('inference time for 1 clip:%.4f' % (time.time() - inference_before), 's')
+
+  write_file.close()
+  print("done")
+
+def main(_):
+  run_test()
+
+if __name__ == '__main__':
+  tf.app.run()
+
+
+#train
+# Copyright 2015 Google Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""Trains and Evaluates the MNIST network using a feed dictionary."""
+# pylint: disable=missing-docstring
+import os
+import time
+import numpy
+from six.moves import xrange  # pylint: disable=redefined-builtin
+import tensorflow as tf
+import input_data
+import c3d_model
+import math
+import numpy as np
+import sys
+# Basic model parameters as external flags.
+flags = tf.app.flags
+PROJ_DIR = '/home/hy/Documents/aggr/c3d-tf/'
+gpu_num = 1
+CON_TRAIN = False
+#flags.DEFINE_float('learning_rate', 0.0, 'Initial learning rate.')
+flags.DEFINE_float('lr1', 0.0003, 'stable learning rate.') #35,45
+flags.DEFINE_float('lr2', 0.0001, 'fine tunning learning rate.')
+flags.DEFINE_integer('max_steps', 6000, 'Number of steps to run trainer.')
+flags.DEFINE_integer('batch_size', 40, 'Batch size.') #16 best, there are only 16 clips
+FLAGS = flags.FLAGS
+MOVING_AVERAGE_DECAY = 0.9999
+model_log_dir = PROJ_DIR + 'models/'
+model_save_dir = PROJ_DIR + 'good_m/'
+dropouts = [0.8,0.75,0.6,0.4]
+#dropouts = 0.4
+LOG_ON = True
+log_path = PROJ_DIR + 'logs/'
+str_log = ''
+class Logger(object):
+    def __init__(self, log_path, str_log):
+        self.terminal = sys.stdout
+        from datetime import datetime
+        self.str_log = str_log
+        self.log_path = log_path
+        self.log = open(datetime.now().strftime(log_path + '%Y_%m_%d_%H_%M' + str_log + '.log'), "a")
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+    def flush(self):
+        # this flush method is needed for python 3 compatibility.
+        # this handles the flush command by doing nothing.
+        # you might want to specify some extra behavior here.
+        pass
+
+if LOG_ON:
+  sys.stdout = Logger(log_path,str_log)
+
+
+def placeholder_inputs(batch_size):
+  """Generate placeholder variables to represent the input tensors.
+
+  These placeholders are used as inputs by the rest of the model building
+  code and will be fed from the downloaded data in the .run() loop, below.
+
+  Args:
+    batch_size: The batch size will be baked into both placeholders.
+
+  Returns:
+    images_placeholder: Images placeholder.
+    labels_placeholder: Labels placeholder.
+  """
+  # Note that the shapes of the placeholders match the shapes of the full
+  # image and label tensors, except the first dimension is now batch_size
+  # rather than the full size of the train or test data sets.
+  images_placeholder = tf.placeholder(tf.float32, shape=(batch_size,
+                                                         c3d_model.NUM_FRAMES_PER_CLIP,
+                                                         c3d_model.CROP_SIZE,
+                                                         c3d_model.CROP_SIZE,
+                                                         c3d_model.CHANNELS))
+  labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size))
+  return images_placeholder, labels_placeholder
+
+
+def average_gradients(tower_grads):
+  average_grads = []
+  for grad_and_vars in zip(*tower_grads):
+    grads = []
+    for g, _ in grad_and_vars:
+      expanded_g = tf.expand_dims(g, 0)
+      grads.append(expanded_g)
+    grad = tf.concat(grads, 0)
+    grad = tf.reduce_mean(grad, 0)
+    v = grad_and_vars[0][1]
+    grad_and_var = (grad, v)
+    average_grads.append(grad_and_var)
+  return average_grads
+
+def tower_loss(name_scope, logit, labels):
+  cross_entropy_mean = tf.reduce_mean(
+                  tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels,logits=logit)
+                  )
+  tf.summary.scalar(
+                  name_scope + '_cross_entropy',
+                  cross_entropy_mean
+                  )
+  weight_decay_loss = tf.get_collection('weightdecay_losses')
+  tf.summary.scalar(name_scope + '_weight_decay_loss', tf.reduce_mean(weight_decay_loss) )
+
+  # Calculate the total loss for the current tower.
+  total_loss = cross_entropy_mean + weight_decay_loss
+  tf.summary.scalar(name_scope + '_total_loss', tf.reduce_mean(total_loss) )
+  return total_loss
+
+def tower_acc(logit, labels):
+  correct_pred = tf.equal(tf.argmax(logit, 1), labels)
+  accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+  return accuracy
+
+def _variable_on_cpu(name, shape, initializer):
+  with tf.device('/cpu:0'):
+    var = tf.get_variable(name, shape, initializer=initializer)
+  return var
+
+def _variable_with_weight_decay(name, shape, wd):
+  var = _variable_on_cpu(name, shape, tf.contrib.layers.xavier_initializer())
+  if wd is not None:
+    weight_decay = tf.nn.l2_loss(var)*wd
+    tf.add_to_collection('weightdecay_losses', weight_decay)
+  return var
+
+
+def get_vars_to_restore(vars,checkpoint_exclude_scopes):
+  variables_to_restore = []
+  exclusions = [scope.strip() for scope in checkpoint_exclude_scopes]
+  for var in vars:
+    #print 'var in vars',var
+    excluded = False
+    for exclusion in exclusions:
+      #print 'exclusion:',exclusion
+      if var.op.name.startswith(exclusion):
+          excluded = True
+          break
+      if not excluded:
+          variables_to_restore.append(var)
+  return variables_to_restore
+
+
+
+def run_training():
+  # Get the sets of images and labels for training, validation, and
+  # Tell TensorFlow that the model will be built into the default Graph.
+
+  # Create model directory
+  print 'training, load graph'
+
+  if not os.path.exists(model_log_dir):
+      os.makedirs(model_log_dir)
+  use_pretrained_model = False
+  pre_model_name = "/media/sf_shared/sports1m_finetuning_ucf101.model"
+  model_name = PROJ_DIR + "models/c3d_ucf_model_0.8_0.3-100.meta"
+
+  with tf.Graph().as_default():
+    global_step = tf.get_variable(
+                    'global_step',
+                    [],
+                    initializer=tf.constant_initializer(0),
+                    trainable=False
+                    )
+    images_placeholder, labels_placeholder = placeholder_inputs(
+                    FLAGS.batch_size * gpu_num)
+
+    images_placeholder_val, labels_placeholder_val = placeholder_inputs(
+        4 * gpu_num
+                    )
+
+    tower_grads1 = []
+    tower_grads2 = []
+    pred = []
+
+    #with tf.variable_scope('var_name') as var_scope:
+    use_2_layers = True
+
+    if use_2_layers and not use_pretrained_model:
+      with tf.variable_scope('var_name') as var_scope:
+        weights = {
+            'wc1': _variable_with_weight_decay('wc1', [3, 3, 3, 3, 4], 0.0005),
+            'wc2': _variable_with_weight_decay('wc2', [3, 3, 3, 4, 12], 0.0005),
+
+            'wd1': _variable_with_weight_decay('wd1', [75264, 128], 0.0005),  #
+            'wd2': _variable_with_weight_decay('wd2', [128, 2], 0.0005),
+            'out': _variable_with_weight_decay('out', [2, 2], 0.0005)
+
+            # 'out': _variable_with_weight_decay('wout', [2, c3d_model.NUM_CLASSES], 0.0005)
+        }
+        biases = {
+            'bc1': _variable_with_weight_decay('bc1', [4], 0.000),
+            'bc2': _variable_with_weight_decay('bc2', [12], 0.000),
+
+            'bd1': _variable_with_weight_decay('bd1', [128], 0.000),
+            'bd2': _variable_with_weight_decay('bd2', [2], 0.000),
+            'bout': _variable_with_weight_decay('bout', [2], 0.000),
+            # 'out': _variable_with_weight_decay('bout', [c3d_model.NUM_CLASSES], 0.000),
+        }
+
+    if not use_2_layers and not use_pretrained_model:
+      with tf.variable_scope('var_name') as var_scope:
+        weights = {
+                'wc1': _variable_with_weight_decay('wc1', [3, 3, 3, 3, 64], 0.0005),
+                'wc2': _variable_with_weight_decay('wc2', [3, 3, 3, 64, 128], 0.0005),
+
+                'wc3a': _variable_with_weight_decay('wc3a', [3, 3, 3, 128, 256], 0.0005),
+                'wc3b': _variable_with_weight_decay('wc3b', [3, 3, 3, 256, 256], 0.0005),
+                'wc4a': _variable_with_weight_decay('wc4a', [3, 3, 3, 256, 512], 0.0005),
+                'wc4b': _variable_with_weight_decay('wc4b', [3, 3, 3, 512, 512], 0.0005),
+                'wc5a': _variable_with_weight_decay('wc5a', [3, 3, 3, 512, 512], 0.0005),
+                'wc5b': _variable_with_weight_decay('wc5b', [3, 3, 3, 512, 512], 0.0005),  # output 8192
+
+                'wd1': _variable_with_weight_decay('wd1', [8192, 4096], 0.0005),  #
+                'wd2': _variable_with_weight_decay('wd2', [4096, 2], 0.0005),
+                'out': _variable_with_weight_decay('wout', [2, 2], 0.0005)
+
+            }
+        biases = {
+                'bc1': _variable_with_weight_decay('bc1', [64], 0.000),
+                'bc2': _variable_with_weight_decay('bc2', [128], 0.000),
+
+                'bc3a': _variable_with_weight_decay('bc3a', [256], 0.000),
+                'bc3b': _variable_with_weight_decay('bc3b', [256], 0.000),
+                'bc4a': _variable_with_weight_decay('bc4a', [512], 0.000),
+                'bc4b': _variable_with_weight_decay('bc4b', [512], 0.000),
+                'bc5a': _variable_with_weight_decay('bc5a', [512], 0.000),
+                'bc5b': _variable_with_weight_decay('bc5b', [512], 0.000),
+
+                'bd1': _variable_with_weight_decay('bd1', [4096], 0.000),
+                'bd2': _variable_with_weight_decay('bd2', [2], 0.000),
+                'bout': _variable_with_weight_decay('bout', [2], 0.000),
+            }
+    if use_pretrained_model: #so far still cannot set out-class as 2
+        with tf.variable_scope('var_name') as var_scope:
+          weights = {
+                  'wc1': _variable_with_weight_decay('wc1', [3, 3, 3, 3, 64], 0.0005),
+                  'wc2': _variable_with_weight_decay('wc2', [3, 3, 3, 64, 128], 0.0005),
+
+                  'wc3a': _variable_with_weight_decay('wc3a', [3, 3, 3, 128, 256], 0.0005),
+                  'wc3b': _variable_with_weight_decay('wc3b', [3, 3, 3, 256, 256], 0.0005),
+                  'wc4a': _variable_with_weight_decay('wc4a', [3, 3, 3, 256, 512], 0.0005),
+                  'wc4b': _variable_with_weight_decay('wc4b', [3, 3, 3, 512, 512], 0.0005),
+                  'wc5a': _variable_with_weight_decay('wc5a', [3, 3, 3, 512, 512], 0.0005),
+                  'wc5b': _variable_with_weight_decay('wc5b', [3, 3, 3, 512, 512], 0.0005),#output 8192
+
+                  'wd1': _variable_with_weight_decay('wd1', [8192, 4096], 0.0005), #
+                  'wd2': _variable_with_weight_decay('wd2', [4096, 4096], 0.0005),
+                  #'out': _variable_with_weight_decay('wout', [4096, 2], 0.0005)
+                  'out': _variable_with_weight_decay('wout', [4096, c3d_model.NUM_CLASSES], 0.0005)
+
+                  #'out': _variable_with_weight_decay('wout', [2, c3d_model.NUM_CLASSES], 0.0005)
+                  }
+          biases = {
+                  'bc1': _variable_with_weight_decay('bc1', [64], 0.000),
+                  'bc2': _variable_with_weight_decay('bc2', [128], 0.000),
+
+                  'bc3a': _variable_with_weight_decay('bc3a', [256], 0.000),
+                  'bc3b': _variable_with_weight_decay('bc3b', [256], 0.000),
+                  'bc4a': _variable_with_weight_decay('bc4a', [512], 0.000),
+                  'bc4b': _variable_with_weight_decay('bc4b', [512], 0.000),
+                  'bc5a': _variable_with_weight_decay('bc5a', [512], 0.000),
+                  'bc5b': _variable_with_weight_decay('bc5b', [512], 0.000),
+
+                  'bd1': _variable_with_weight_decay('bd1', [4096], 0.000),
+                  'bd2': _variable_with_weight_decay('bd2', [4096], 0.000),
+                  #'bout': _variable_with_weight_decay('bout', [2], 0.000),
+                  'bout': _variable_with_weight_decay('bout', [c3d_model.NUM_CLASSES], 0.000),
+                  }
+
+    #for gpu_index in range(0, gpu_num):
+      #with tf.device('/gpu:%d' % gpu_index):
+      #with tf.device('/cpu:%d' % gpu_index):
+    gpu_index = 0
+    print 'getting varlist'
+    varlist2 = [ weights['out'],biases['bout'] ]
+    varlist1 = list( set(weights.values() + biases.values()) - set(varlist2) )
+
+    print 'setting c3d model inference' #inference_c3d_2l
+
+    if use_2_layers:
+        logit = c3d_model.inference_c3d_2l(
+            images_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size, :, :, :, :],
+            dropouts,
+            FLAGS.batch_size,
+            weights,
+            biases
+        )
+
+
+    else:
+
+        logit = c3d_model.inference_c3d(
+                        images_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size,:,:,:,:],
+                        dropouts,
+                        FLAGS.batch_size,
+                        weights,
+                        biases
+                        )
+    loss_name_scope = ('cpud_%d_loss' % gpu_index)
+
+    print 'setting loss'
+    loss = tower_loss(
+                    loss_name_scope,
+                    logit,
+                    labels_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size]
+                    )
+
+    opt_stable = tf.train.AdamOptimizer(learning_rate=FLAGS.lr1) #1e-4
+    opt_finetuning = tf.train.AdamOptimizer(learning_rate=FLAGS.lr2) #1e-3
+    grads1 = opt_stable.compute_gradients(loss, varlist1)
+    grads2 = opt_finetuning.compute_gradients(loss, varlist2)
+    tower_grads1.append(grads1)
+    tower_grads2.append(grads2)
+    pred.append(logit)
+
+    ####### out of GPU loop
+    print 'out of GPU loop'
+    pred = tf.concat(pred,0,name='pred')
+    print 'concat pred done, doing tower_acc'
+    accuracy = tower_acc(pred, labels_placeholder)
+    tf.summary.scalar('accuracy', accuracy)
+    print 'get avg gradients'
+    grads1 = average_gradients(tower_grads1)
+    grads2 = average_gradients(tower_grads2)
+    print 'applying gradients'
+
+    apply_gradient_op1 = opt_stable.apply_gradients(grads1)
+    apply_gradient_op2 = opt_finetuning.apply_gradients(grads2, global_step=global_step)
+
+    saver = tf.train.Saver(weights.values() + biases.values())
+    if use_pretrained_model:
+      checkpoint_exclude_scopes = ['var_name/wc1','var_name/wc2','var_name/wc3a','var_name/wc3b',
+                                   'var_name/wc4a','var_name/wc4b','var_name/wc5a','var_name/wc5b',
+                                   #"var_name/wd1", "var_name/wd2",
+                                   'var_name/bc1','var_name/bc2','var_name/bc3a','var_name/bc3b',
+                                   'var_name/bc4a', 'var_name/bc4b', 'var_name/bc5a', 'var_name/bc5b'
+                                   #'var_name/bd1', 'var_name/bd2'
+                                   ]
+      vars = [v for v in tf.trainable_variables('var_name')]
+      #print 'ori vars:', vars
+      variables_to_restore = get_vars_to_restore(vars, checkpoint_exclude_scopes)
+      print 'variable to restore:', variables_to_restore
+    #
+    #follow moving avg
+    print 'train exponential moving avg'
+    variable_averages = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY)
+    variables_averages_op = variable_averages.apply(tf.trainable_variables())
+    train_op = tf.group(apply_gradient_op1, apply_gradient_op2, variables_averages_op)
+    null_op = tf.no_op()
+
+
+    init = tf.global_variables_initializer()
+
+    # Create a session for running Ops on the Graph.
+    print 'create session'
+    print 'learning rate:',FLAGS.lr1,':',FLAGS.lr2,', batch size:', FLAGS.batch_size,
+    print ', dropouts:',dropouts
+    start_time = time.time()
+    sess = tf.Session(
+                    config=tf.ConfigProto(allow_soft_placement=True)
+                    )
+    # Create a saver for writing training checkpoints.
+    print 'new training'
+    #saver = tf.train.Saver(weights.values() + biases.values())
+    #saver = tf.train.Saver()
+    if CON_TRAIN:
+      saver.restore(sess, model_name[:-5])
+      print ('restore ok, continue training model:',model_name)
+
+
+    sess.run(init)
+    if os.path.isfile(pre_model_name) and use_pretrained_model:
+      print ('restoring pre-trained model')
+      saver.restore(sess, pre_model_name)
+      print ('restored ok', pre_model_name)
+
+    # Create summary writter
+    #print 'creating summary writer'
+    merged = tf.summary.merge_all()
+    #train_writer = tf.summary.FileWriter('./visual_logs/train', sess.graph)
+    #test_writer = tf.summary.FileWriter('./visual_logs/test', sess.graph)
+    for step in xrange(FLAGS.max_steps):
+      train_images, train_labels, _, _, _ = input_data.read_clip_and_label(
+                      filename=PROJ_DIR+'list/train.list',
+                      batch_size=FLAGS.batch_size * gpu_num,
+                      num_frames_per_clip=c3d_model.NUM_FRAMES_PER_CLIP,
+                      crop_size=c3d_model.CROP_SIZE,
+                      shuffle=True
+                      )
+      print 'Step %5d:' % step,
+      sess.run(train_op, feed_dict={
+                      images_placeholder: train_images,
+                      labels_placeholder: train_labels
+                      })
+      duration = time.time() - start_time
+
+      # Save a checkpoint and evaluate the model periodically.
+      if (step) % 1 == 0 or (step + 1) == FLAGS.max_steps:
+        #saver.save(sess, os.path.join(model_log_dir, 'c3d_ucf_model'), global_step=step)
+        summary, acc = sess.run(
+                        [merged, accuracy],
+                        feed_dict={images_placeholder: train_images,
+                            labels_placeholder: train_labels
+                            })
+        #train_writer.add_summary(summary, step)
+        val_images, val_labels, _, _, _ = input_data.read_clip_and_label(
+                        filename=PROJ_DIR+'list/test.list',
+                        batch_size=FLAGS.batch_size * gpu_num,
+                        num_frames_per_clip=c3d_model.NUM_FRAMES_PER_CLIP,
+                        crop_size=c3d_model.CROP_SIZE,
+                        shuffle=False
+                        )
+        summary, acc_val = sess.run(
+                        [merged, accuracy],
+                        feed_dict={
+                                        images_placeholder: val_images,
+                                        labels_placeholder: val_labels
+                                        })
+        #print 'Step %d: %.3f sec' % (step, duration)+'Training acc:' + "{:.5f}".format(acc), ': Validation acc:' + "{:.5f}".format(acc_val)
+        print '%.3fs ....' % (duration) + ' Training acc:' + "{:.5f}".format(
+            acc), ': Validation acc:' + "{:.5f}".format(acc_val)
+        saver.save(sess, os.path.join(model_log_dir, 'c3d_ucf_model_' + str(acc) +'_'+ str(acc_val)), global_step=step)
+        if acc > 0.8 and acc_val > 0.75:
+            saver.save(sess, os.path.join(model_save_dir, 'c3d_good_model_' + str(acc) +'_'+ str(acc_val)), global_step=step)
+            print 'save good model:',model_save_dir + 'c3d_good_model_' + str(acc) +'_'+ str(acc_val)
+            cmd = 'rm ' + model_log_dir + '*ucf_model*'
+            os.system(cmd)
+            step = FLAGS.max_steps +100
+            break
+
+        #test_writer.add_summary(summary, step)
+  print("done")
+
+#/tmp/eva_c3d_ucf101.py/venv/bin/python /home/hy/Documents/aggr/C3D-tf_li/train_c3d_ucf101.py
+def main(_):
+  run_training()
+
+if __name__ == '__main__':
+ tf.app.run()
