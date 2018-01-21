@@ -18,24 +18,24 @@
 # pylint: disable=missing-docstring
 from __future__ import absolute_import
 from __future__ import division
-from __future__ import print_function
+#from __future__ import print_function
 
 import os.path
 import time
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 import input_data
-import c3d_model
+import vmodel as c3d_model
 import numpy as np
 
 # Basic model parameters as external flags.
 flags = tf.app.flags
 gpu_num = 1
-flags.DEFINE_integer('batch_size', 1, 'Batch size.')
+flags.DEFINE_integer('batch_size', 6, 'Batch size.')
 FLAGS = flags.FLAGS
-PROJ_DIR = '/home/hy/Documents/aggr/c3d-tf/'
+PROJ_DIR = '/home/hy/Documents/liantf1/'
 SAVE_RES_TO_FILE = False
-
+NUM_CLASSES = 3
 
 def placeholder_inputs(batch_size):
   """Generate placeholder variables to represent the input tensors.
@@ -73,13 +73,13 @@ def _variable_with_weight_decay(name, shape, stddev, wd):
 
 def run_test():
   #pre_model_name = PROJ_DIR + "models/c3d_ucf_model-1.model"
-  model_name = PROJ_DIR + "good_m/0.8_0.7/c3d_good_model_0.8_0.7-631.meta"
-  #model_name = PROJ_DIR + "models/c3d_ucf_model_0.65_0.4-5565.meta"
-  #test_list_file = PROJ_DIR + 'list/test_eva.list'
-  test_list_file = PROJ_DIR + 'list/test_eva_s.list'
-  num_test_videos = len(list(open(test_list_file,'r')))/16
-  print("Number of test videos={}".format(num_test_videos))
-
+  #model_name = PROJ_DIR + "good_m/0.8_0.7/c3d_good_model_0.8_0.7-631.meta"
+  model_name = PROJ_DIR + "models/c3d_ucf_model_0.4_0.7-2.meta"
+  test_list_file = PROJ_DIR + 'list/test_eva.list'
+  #test_list_file = PROJ_DIR + 'list/test_eva_s.list'
+  num_test_videos = len(list(open(test_list_file,'r')))
+  #print "Number of test videos={}".format(num_test_videos)
+  
   # Get the sets of images and labels for training, validation, and
   images_placeholder, labels_placeholder = placeholder_inputs(FLAGS.batch_size * gpu_num)
   #with tf.variable_scope('var_name') as var_scope:
@@ -94,15 +94,15 @@ def run_test():
           'wc1': _variable_with_weight_decay('wc1', [3, 3, 3, 3, 4], 0.04, 0.00),
           'wc2': _variable_with_weight_decay('wc2', [3, 3, 3, 4, 12], 0.04, 0.00),
           'wd1': _variable_with_weight_decay('wd1', [75264, 128], 0.04, 0.001),
-          'wd2': _variable_with_weight_decay('wd2', [128, 2], 0.04, 0.002),
-          'out': _variable_with_weight_decay('out', [2, 2], 0.04, 0.005)
+          'wd2': _variable_with_weight_decay('wd2', [128, NUM_CLASSES], 0.04, 0.002),
+          'out': _variable_with_weight_decay('out', [NUM_CLASSES, NUM_CLASSES], 0.04, 0.005)
       }
       biases = {
           'bc1': _variable_with_weight_decay('bc1', [4], 0.04, 0.0),
           'bc2': _variable_with_weight_decay('bc2', [12], 0.04, 0.0),
           'bd1': _variable_with_weight_decay('bd1', [128], 0.04, 0.0),
-          'bd2': _variable_with_weight_decay('bd2', [2], 0.04, 0.0),
-          'bout': _variable_with_weight_decay('bout', [2], 0.04, 0.0),
+          'bd2': _variable_with_weight_decay('bd2', [NUM_CLASSES], 0.04, 0.0),
+          'bout': _variable_with_weight_decay('bout', [NUM_CLASSES], 0.04, 0.0),
       }
   if use_3_layers:
     with tf.variable_scope('var_name') as var_scope:
@@ -113,8 +113,8 @@ def run_test():
           'wc3a': _variable_with_weight_decay('wc3a', [3, 3, 3, 12, 40], 0.04, 0.00),
           'wc3b': _variable_with_weight_decay('wc3b', [3, 3, 3, 40, 40], 0.04, 0.00),
           'wd1': _variable_with_weight_decay('wd1', [31360, 128], 0.04, 0.001),
-          'wd2': _variable_with_weight_decay('wd2', [128, 2], 0.04, 0.002),
-          'out': _variable_with_weight_decay('out', [2, 2], 0.04, 0.005)
+          'wd2': _variable_with_weight_decay('wd2', [128, NUM_CLASSES], 0.04, 0.002),
+          'out': _variable_with_weight_decay('out', [NUM_CLASSES, NUM_CLASSES], 0.04, 0.005)
       }
       biases = {
           'bc1': _variable_with_weight_decay('bc1', [4], 0.04, 0.0),
@@ -122,8 +122,8 @@ def run_test():
           'bc3a': _variable_with_weight_decay('bc3a', [40], 0.04, 0.0),
           'bc3b': _variable_with_weight_decay('bc3b', [40], 0.04, 0.0),
           'bd1': _variable_with_weight_decay('bd1', [128], 0.04, 0.0),
-          'bd2': _variable_with_weight_decay('bd2', [2], 0.04, 0.0),
-          'bout': _variable_with_weight_decay('bout', [2], 0.04, 0.0),
+          'bd2': _variable_with_weight_decay('bd2', [NUM_CLASSES], 0.04, 0.0),
+          'bout': _variable_with_weight_decay('bout', [NUM_CLASSES], 0.04, 0.0),
       }
 
   if not use_2_layers and not use_3_layers:
@@ -138,8 +138,8 @@ def run_test():
             'wc5a': _variable_with_weight_decay('wc5a', [3, 3, 3, 512, 512], 0.04, 0.00),
             'wc5b': _variable_with_weight_decay('wc5b', [3, 3, 3, 512, 512], 0.04, 0.00),
             'wd1': _variable_with_weight_decay('wd1', [8192, 4096], 0.04, 0.001),
-            'wd2': _variable_with_weight_decay('wd2', [4096, 2], 0.04, 0.002),
-            'out': _variable_with_weight_decay('out', [2, 2], 0.04, 0.005)
+            'wd2': _variable_with_weight_decay('wd2', [4096, NUM_CLASSES], 0.04, 0.002),
+            'out': _variable_with_weight_decay('out', [NUM_CLASSES, NUM_CLASSES], 0.04, 0.005)
             }
     biases = {
             'bc1': _variable_with_weight_decay('bc1', [64], 0.04, 0.0),
@@ -151,8 +151,8 @@ def run_test():
             'bc5a': _variable_with_weight_decay('bc5a', [512], 0.04, 0.0),
             'bc5b': _variable_with_weight_decay('bc5b', [512], 0.04, 0.0),
             'bd1': _variable_with_weight_decay('bd1', [4096], 0.04, 0.0),
-            'bd2': _variable_with_weight_decay('bd2', [2], 0.04, 0.0),
-            'bout': _variable_with_weight_decay('bout', [2], 0.04, 0.0),
+            'bd2': _variable_with_weight_decay('bd2', [NUM_CLASSES], 0.04, 0.0),
+            'bout': _variable_with_weight_decay('bout', [NUM_CLASSES], 0.04, 0.0),
             }
 
   logits = []
@@ -179,7 +179,7 @@ def run_test():
 
   logits = tf.concat(logits,0)
   norm_score = tf.nn.softmax(logits)
-  print ('got norm score')
+  print 'got norm score'
   saver = tf.train.Saver()
   sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
   init = tf.global_variables_initializer()
@@ -187,20 +187,25 @@ def run_test():
   # Create a saver for writing training checkpoints.
   #model path_file: PROJ_DIR + "models/c3d_ucf_model-1.meta"
   saver.restore(sess, model_name[:-5])
-  print ('restore ok')
+  print 'restore ok'
   # And then after everything is built, start the loop.
   bufsize = 0
   res_name,end = os.path.splitext(os.path.basename(model_name))
   res_name = 'pred_res' + res_name
-  write_file = open(res_name + '.txt', "w+", bufsize)
+  if SAVE_RES_TO_FILE:
+    write_file = open(res_name + '.txt', "w+", bufsize)
   next_start_pos = 0
-  #all_steps = int((num_test_videos - 1) / (FLAGS.batch_size * gpu_num) + 1)
-  all_steps = 3
+  print 'num of test videos:', num_test_videos
+  print 'next',next_start_pos
+  all_steps = int((num_test_videos - 1) / (FLAGS.batch_size * gpu_num) + 1)
+  #all_steps = 3
   print ('time before test loop:', time.time() - start, 's')
   for step in xrange(all_steps):
     # Fill a feed dictionary with the actual set of images and labels
     # for this particular training step.
     inference_before = time.time()
+    print 'Test Batch:',step,':position:',next_start_pos
+
     '''
     test_images, test_labels, next_start_pos, _, valid_len = \
             input_data.read_clip_and_label(
@@ -225,7 +230,8 @@ def run_test():
       #gt, corr_rate, pred_label, confidence
 
 
-      print ('Step:',step,':position:',next_start_pos,': \ntarget:',true_label[0][0], 'pred:',top1_predicted_label,)
+      print 'target:',true_label[0], 'pred:',top1_predicted_label
+
       if SAVE_RES_TO_FILE:
         write_file.write('{}, {}, {}, {}\n'.format(
               true_label[0],
