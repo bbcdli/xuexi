@@ -1,0 +1,64 @@
+#!/bin/bash
+# 
+# convert the video to images, can convert avi or mp4
+#   Usage (sudo for the remove priviledge):
+#       sudo ./convert_video_to_images.sh path/to/video fps
+#   Example Usage:
+#       sudo ./convert_video_to_images.sh ~/document/videofile/ 5
+#   Example Output:
+#       ~/document/videofile/walk/video1.avi 
+#       #=>
+#       ~/document/videofile/walk/video1/00001.jpg
+
+#       ...
+# used command: ./convert_video_to_images.sh /home/hy/Documents/Own_data 1 
+#sudo apt-get install ffmpeg
+
+for folder in $1/*
+do
+    for file in "$folder"/*/*.avi
+    do
+        if [[ ! -d "${file[@]%.avi}" ]]; then
+            mkdir -p "${file[@]%.avi}"
+        fi
+        ffmpeg -i "$file" -vf fps=$2 "${file[@]%.avi}"/%05d.jpg
+        #rm "$file"
+    done
+done
+
+
+#!/bin/bash
+#
+# convert the images folder to the test.list and train.list file according to
+#   the distribution, command will clear the train.list and test.list files first
+#
+#   Args:
+#       path: the path to the video folder
+#       factor: denominator that split the train and test data. if the number 
+#               is 4, then 1/4 of the data will be written to test.list and the
+#               rest of the data will be written to train.list
+#   Usage:
+#       ./convert_images_to_list.sh path/to/video 4
+#   Example Usage:
+#       ./convert_images_to_list.sh ~/document/videofile 4
+#   Example Output(train.list and test.list):
+#       /Volumes/passport/datasets/action_kth/origin_images/boxing/person01_boxing_d1_uncomp 0
+#       /Volumes/passport/datasets/action_kth/origin_images/boxing/person01_boxing_d2_uncomp 0
+#       ...
+#  used command: ./create_train_test_list.sh /home/hy/Documents/Own_data 4  #the factor 4 does not wowrk.
+
+> train.list
+> test.list
+COUNT=-1
+for folder in $1/*
+do
+    COUNT=$[$COUNT + 1]
+    for imagesFolder in "$folder"/*/*/    #specify / to loop only directories
+    do
+        if (( $(jot -r 1 1 $2)  > 1 )); then
+            echo "$imagesFolder" $COUNT >> train.list
+        else
+            echo "$imagesFolder" $COUNT >> test.list
+        fi        
+    done
+done
