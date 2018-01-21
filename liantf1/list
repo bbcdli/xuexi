@@ -62,3 +62,58 @@ do
         fi        
     done
 done
+
+
+#create_list_hy.sh
+#!/bin/bash
+
+# create train and test list containing absolute path of each image and label
+#   
+#   Args:
+#       path: the path to the video folder
+#       factor: denominator that split the train and test data. if the number 
+#               is 4, then 1/4 of the data will be written to test.list and the
+#               rest of the data will be written to train.list
+#   Usage:
+#       ./convert_images_to_list.sh path/to/video 4
+#   Example Usage:
+#       ./convert_images_to_list.sh ~/document/videofile 4
+#   Example Output(train.list and test.list):
+#       /Volumes/passport/datasets/action_kth/origin_images/boxing/person01_boxing_d1_uncomp/xx1.jpg 0
+#       /Volumes/passport/datasets/action_kth/origin_images/boxing/person01_boxing_d2_uncomp/xx2.jpg 0
+
+#       ...
+#f
+
+> train_hy.list
+> test_hy.list
+COUNT=-1
+
+for cl_folder in $1/*  #contain 3 classes, $1=tmp,folder=bike,bask,divi
+do
+    COUNT=$[$COUNT + 1]
+    COUNT_IM=0
+    
+    for type_folder in "$cl_folder"/*/    #specify / to loop only directories folder=biking/cl1/
+    
+    do  
+        COUNT_IM=0
+        for images in "$type_folder"*    #imagesFolder=bikeing/cl1/cl1_0/
+        
+        do 
+           TOTAL_IM=$(ls $type_folder* | wc -l)
+           
+           COUNT_IM=$[$COUNT_IM + 1]
+           #echo 'total:'$TOTAL_IM'  count_im:'$COUNT_IM
+        if (( $COUNT_IM<$TOTAL_IM-5 )); then
+            echo "$images" $COUNT >> train_hy.list
+            #echo 'train'
+        else
+            echo "$images" $COUNT >> test_hy.list
+            #echo 'test'
+        fi 
+        # 
+        done      
+    done
+done
+echo 'end'
