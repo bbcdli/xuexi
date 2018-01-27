@@ -1,0 +1,2445 @@
+# silanno.py
+# !/usr/bin/env python
+# -*- coding: utf8 -*-
+import collections
+from copy import deepcopy
+from warnings import warn
+import numpy as np
+import _init_path
+import os.path
+import re
+import sys
+import subprocess
+from functools import partial
+from collections import defaultdict
+from PyQt4.Qt import pyqtSlot
+import PyQt4.Qt as Qt
+from PyQt4.QtGui import *
+from PyQt4.QtCore import *
+import resources
+from argparse import ArgumentParser
+from ConfigParser import ConfigParser
+from lib import struct, newAction, newIcon, addActions, fmtShortcut, new_pixmap
+from lib import cfgget, cfggetint, cfggetfloat, cfggetboolean
+from shape import Shape, DEFAULT_LINE_COLOR, DEFAULT_FILL_COLOR, Box, Poly
+from timelinelegend import TimelineLegendDialog
+from canvas import Canvas
+from zoomWidget import ZoomWidget
+from labelDialog import LabelDialog
+from colorDialog import ColorDialog
+from labelFile import LabelFile, LabelFileError
+from toolBar import ToolBar
+from pascal_voc_io import PascalVocReader, BOX_XML, POLY_XML
+from helpdialog import HELP_SECTION_NAVIGATION, HELP_SECTION_EDIT, HELP_SECTION_GENERAL, HELP_SECTION_VIEW, HelpDialog
+
+__appname__ = 'silanno'
+__major__ = '1'
+__minor__ = '2'
+__patch__ = '0'
+__version__ = '.'.join([__major__, __minor__, __patch__])
+
+
+### Utility functions and classes.
+def new_action(parent, text, slot=None, shortcut=None, icon=None,
+               tip=None, checkable=False, enabled=True, section=None):
+	global KEYBOARD_SHORTCUTS
+	if section is None:
+		section = 'others'
+	action = newAction(parent, text, slot, shortcut, icon, tip, checkable, enabled)
+	try:
+		KEYBOARD_SHORTCUTS[section].append((shortcut, text.replace('&', ''), new_pixmap(icon)))
+	except KeyError:
+		KEYBOARD_SHORTCUTS[section] = []
+		KEYBOARD_SHORTCUTS[section].append((shortcut, text.replace('&', ''), new_pixmap(icon)))
+	return action
+
+
+class WindowMixin(object):
+	def menu(self, title, actions=None):
+		menu = self.menuBar().addMenu(title)
+		if actions:
+			addActions(menu, actions)
+		return menu
+	
+	def toolbar(self, title, actions=None):
+		toolbar = ToolBar(title)
+		toolbar.setObjectName(u'%sToolBar' % title)
+		# toolbar.setOrientation(Qt.Vertical)
+		toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+		if actions:
+			addActions(toolbar, actions)
+		self.addToolBar(Qt.LeftToolBarArea, toolbar)
+		return toolbar
+
+
+class InformationOverlay(QWidget):
+	def __init__(self, mode=None, propagation_mode=False, imname=None, parent=None):
+		super(InformationOverlay, self).__init__(parent)
+		main_layout = QVBoxLayout()
+		main_layout.setAlignment(Qt.AlignLeft)
+		self.mode_label = QLabel()
+		self.propagation_mode_label = QLabel()
+		self.filename_label = QLabel()
+		main_layout.addWidget(self.mode_label)
+		main_layout.addWidget(self.propagation_mode_label)
+		main_layout.addWidget(self.filename_label)
+		self.mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+		self.propagation_mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+		self.filename_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+		self.update_mode(mode, propagation_mode, imname)
+		font = QFont("FreeMono", 9, 1)
+		font.setBold(True)
+		self.mode_label.setFont(font)
+		self.propagation_mode_label.setFont(font)
+		self.filename_label.setFont(font)
+		self.mode_label.setStyleSheet("color: rgba(0, 0, 200, 200);")
+		self.propagation_mode_label.setStyleSheet("color: rgba(0, 0, 200, 200);")
+		self.filename_label.setStyleSheet("color: rgba(0, 0, 200, 200);")
+		self.setLayout(main_layout)
+	
+	def update_mode(self, mode, propagation_mode=False, imname=None):
+		if mode is None:
+			mode = 'unknown'
+		if imname is None:
+			imname = 'None'
+		imname = os.path.basename(imname)
+		self.mode_label.setText('mode {}: {}'.format(1 if mode == 'box' else 2, mode))
+		self.propagation_mode_label.setText('propagation mode: {}'.format('True' if propagation_mode else 'False'))
+		self.filename_label.setText('{}'.format(imname))
+		self.mode_label.adjustSize()
+		self.propagation_mode_label.adjustSize()
+		self.filename_label.adjustSize()
+		self.adjustSize()
+	
+	def paintEvent(self, event):
+		painter = QPainter(self)
+		painter.setRenderHint(QPainter.Antialiasing)
+		painter.fillRect(event.rect(), QBrush(QColor(255, 255, 255, 127)))
+		painter.setPen(QPen(Qt.NoPen))
+		super(InformationOverlay, self).paintEvent(event)
+
+
+KEYBOARD_SHORTCUTS = {}
+
+
+class IndexLabel(QLabel):
+	def __init__(self, *args, **kwargs):
+		super(IndexLabel, self).__init__(*args, **kwargs)
+		self.setStyleSheet("color: rgba(0, 0, 200, 200);")
+	
+	def paintEvent(self, ev):
+		p = QPainter(self)
+		p.fillRect(self.rect(), QBrush(QColor(255, 255, 255, 127)))
+		super(IndexLabel, self).paintEvent(ev)
+
+
+class IndexTitleWidget(QWidget):
+	def __init__(self):
+		super(IndexTitleWidget, self).__init__()
+		self.setStyleSheet("background-color: rgb(200,200,200);")
+		layout = QHBoxLayout()
+		self.setLayout(layout)
+		slabel = QLabel()
+		clabel = QLabel()
+		elabel = QLabel()
+		elabel.setAlignment(Qt.AlignRight)
+		clabel.setAlignment(Qt.AlignCenter)
+		slabel.setAlignment(Qt.AlignLeft)
+		layout.addWidget(slabel)
+		layout.addWidget(clabel)
+		layout.addWidget(elabel)
+		layout.setSpacing(0)
+		layout.setMargin(0)
+		self.start_label = slabel
+		self.end_label = elabel
+		self.current_index_label = clabel
+	
+	def setMinimum(self, val):
+		self.start_label.setText('{}'.format(val))
+	
+	def setMaximum(self, val):
+		self.end_label.setText('{}'.format(val))
+	
+	def setCurrentIndex(self, val):
+		self.current_index_label.setText('Index: {}'.format(val))
+
+
+class IndexSlider(QSlider):
+	index_changed = pyqtSignal(int)
+	
+	def __init__(self, docker_widget, *args, **kwargs):
+		super(IndexSlider, self).__init__(*args, **kwargs)
+		self.mouse_pressed = False
+		self.index_lab = IndexLabel(self)
+		self.index_lab.hide()
+		self.index_lab.move(5, 1)
+		# self.setMinimumHeight(10)
+		self.valueChanged.connect(self._valueupdate)
+		self.docker_widget = docker_widget
+		self.index_info = IndexTitleWidget()
+		self.docker_widget.setTitleBarWidget(self.index_info)
+	
+	def mousePressEvent(self, ev):
+		self.mouse_pressed = True
+		self.setValue(QStyle.sliderValueFromPosition(self.minimum(), self.maximum(), ev.x(), self.width()))
+		super(IndexSlider, self).mousePressEvent(ev)
+	
+	# self.index_lab.show()
+	def mouseReleaseEvent(self, QMouseEvent):
+		# super(IndexSlider, self).mouseReleaseEvent(QMouseEvent)
+		self.index_lab.hide()
+		self.repaint()
+		if self.mouse_pressed:
+			self.index_changed.emit(self.value())
+		self.mouse_pressed = False
+	
+	def keyReleaseEvent(self, *args, **kwargs):
+		pass
+	
+	def keyPressEvent(self, *args, **kwargs):
+		pass
+	
+	def setRange(self, p_int, p_int_1):
+		super(IndexSlider, self).setRange(p_int, p_int_1)
+		self.index_info.setMaximum(p_int_1)
+		self.index_info.setMinimum(p_int)
+	
+	def setMinimum(self, m):
+		super(IndexSlider, self).setMinimum(m)
+		self.index_info.setMinimum(m)
+	
+	def setMaximum(self, m):
+		super(IndexSlider, self).setMaximum(m)
+		self.index_info.setMaximum(m)
+	
+	@pyqtSlot(int)
+	def _valueupdate(self, val):
+		pos = self.mapFromGlobal(QCursor.pos())
+		self.index_lab.setText('{}'.format(val))
+		# self.docker_widget.setWindowTitle('Index: {}'.format(val))
+		self.index_info.setCurrentIndex(val)
+		self.index_lab.adjustSize()
+	
+	def paintEvent(self, QPaintEvent):
+		super(IndexSlider, self).paintEvent(QPaintEvent)
+
+
+class AnnotationHighlighter(QSlider):
+	def __init__(self, frame_index, tick_color, label, *args, **kwargs):
+		lkwargs = {'orientation': Qt.Horizontal}
+		lkwargs.update(kwargs)
+		super(AnnotationHighlighter, self).__init__(*args, **lkwargs)
+		self.setTickPosition(QSlider.TicksBelow)
+		self._frame_index = frame_index
+		self.tick_color = tick_color
+		self.label = label
+		self._pixmap = None
+		self.setMinimumHeight(5)
+		print self.minimumSizeHint(), self.minimumHeight()
+		self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+	
+	@property
+	def frame_index(self):
+		return self._frame_index
+	
+	@frame_index.setter
+	def frame_index(self, al):
+		self._frame_index = al
+		self.update()
+	
+	def getStyleOption(self):
+		opt = QStyleOptionSlider()
+		opt.init(self)
+		opt.subControls = QStyle.SC_None
+		opt.subControls = QStyle.SC_SliderTickmarks
+		opt.activeSubControls = QStyle.SC_None
+		opt.orientation = self.orientation()
+		opt.maximum = self.maximum()
+		opt.minimum = self.minimum()
+		opt.tickPosition = self.tickPosition()
+		opt.tickInterval = self.tickInterval()
+		if self.orientation() == Qt.Horizontal:
+			opt.upsideDown = not self.invertedAppearance() == (opt.direction == Qt.RightToLeft)
+		else:
+			opt.upsideDown = not self.invertedAppearance()
+		opt.direction = Qt.LeftToRight  # we use the upsideDown option instead
+		opt.sliderPosition = self.sliderPosition()
+		opt.sliderValue = self.value()
+		opt.singleStep = self.singleStep()
+		opt.pageStep = self.pageStep()
+		if (self.orientation() == Qt.Horizontal):
+			opt.state = opt.state | QStyle.State_Horizontal
+		return opt
+	
+	def resizeEvent(self, *args, **kwargs):
+		self.force_redraw()
+		super(AnnotationHighlighter, self).resizeEvent(*args, **kwargs)
+	
+	def repaint(self, *__args):
+		self.force_redraw()
+		super(AnnotationHighlighter, self).repaint(*__args)
+	
+	def setMaximum(self, p_int):
+		super(AnnotationHighlighter, self).setMaximum(p_int)
+		self.force_redraw()
+	
+	def setMinimum(self, p_int):
+		super(AnnotationHighlighter, self).setMinimum(p_int)
+		self.force_redraw()
+	
+	def setRange(self, p_int, p_int_1):
+		super(AnnotationHighlighter, self).setRange(p_int, p_int_1)
+		self.force_redraw()
+	
+	def force_redraw(self):
+		self.pixmap = None  # force repaint
+	
+	def genpixmap(self):
+		pixmap = QPixmap(self.width(), self.height())
+		p = QPainter(pixmap)
+		rect = self.rect()
+		c = 200
+		p.fillRect(self.rect(), QColor(c, c, c, 255))
+		# p.drawRect(rect.x(), rect.y(), rect.width(), rect.height())
+		# drawing borrowed and adjusted from:
+		# http://cep.xray.aps.anl.gov/software/qt4-x11-4.2.2-browser/d9/de9/qwindowsxpstyle_8cpp-source.html#l02801
+		style = self.style()
+		slider = self.getStyleOption()
+		self.initStyleOption(slider)
+		# tickOffset = style.pixelMetric(QStyle.PM_SliderTickmarkOffset, slider, self)
+		ticks = slider.tickPosition
+		thickness = style.pixelMetric(QStyle.PM_SliderControlThickness, slider, self)
+		slen = style.pixelMetric(QStyle.PM_SliderLength, slider, self)
+		available = style.pixelMetric(QStyle.PM_SliderSpaceAvailable, slider, self)
+		fudge = slen / 2
+		# bothOffset = 1 if (ticks & QSlider.TicksAbove and ticks & QSlider.TicksBelow) else 0
+		p.setPen(self.tick_color)
+		v = slider.minimum
+		interval = 1
+		margin = 2
+		while (v <= slider.maximum):
+			if not self.frame_index[v - 1]:
+				v += interval
+				continue
+			pos = QStyle.sliderPositionFromValue(slider.minimum, slider.maximum,
+			                                     v, available) + fudge
+			if (slider.orientation == Qt.Horizontal):
+				p.drawLine(pos, 0 + margin, pos, self.height() - margin)
+			else:
+				p.drawLine(0 + margin, pos, self.width() - margin, pos)
+			v += interval
+		return pixmap
+	
+	@property
+	def pixmap(self):
+		if not self._pixmap:
+			self._pixmap = self.genpixmap()
+		return self._pixmap
+	
+	@pixmap.setter
+	def pixmap(self, value):
+		self._pixmap = value
+	
+	def paintEvent(self, QPaintEvent):
+		pixmap = self.pixmap  # reuse image (performance boost)
+		p = QPainter(self)
+		p.drawPixmap(0, 0, pixmap)
+	
+	def update(self, *__args):
+		self.force_redraw()
+		super(AnnotationHighlighter, self).update(*__args)
+
+
+class AnnotationHighlighterWidget(QWidget):
+	def __init__(self, ah_list, index_slider,
+	             index_range_changed,
+	             timeline_dialog, max_anno_height,
+	             reset_index):
+		super(AnnotationHighlighterWidget, self).__init__()
+		self.reset_index = reset_index
+		self.timeline_dialog = timeline_dialog
+		listLayout = QVBoxLayout()
+		self.setLayout(listLayout)
+		listLayout.setSpacing(0)
+		listLayout.setMargin(0)
+		# self.setMinimumHeight(10)
+		self.ah_list = ah_list
+		self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+		for ah in ah_list:
+			listLayout.addWidget(ah)
+			ah.setMaximumHeight(max_anno_height)
+		self.index_slider = index_slider
+		# self.layout().setSizeConstraint(QLayout.SetFixedSize)
+		self.new_index_start = None
+		self.new_index_end = None
+		self.mouseoverlay = MouseGrabOverlay(self)
+		self.index_range_changed = index_range_changed
+	
+	def resizeEvent(self, QResizeEvent):
+		super(AnnotationHighlighterWidget, self).resizeEvent(QResizeEvent)
+		self.mouseoverlay.setGeometry(self.rect())
+	
+	def mousePressEvent(self, QMouseEvent):
+		super(AnnotationHighlighterWidget, self).mousePressEvent(QMouseEvent)
+		# print('{}: mousePressedEvent'.format(self))
+		if QMouseEvent.buttons() & Qt.RightButton:
+			return
+		cx = QMouseEvent.pos().x()
+		pos = QStyle.sliderValueFromPosition(
+			self.index_slider.minimum(),
+			self.index_slider.maximum(),
+			cx,
+			self.index_slider.width()
+		)
+		self.new_index_start = pos
+		self.mouseoverlay.cursor_start = QMouseEvent.pos()
+		self.mouseoverlay.cursor_end = QMouseEvent.pos()
+		self.mouseoverlay.update()
+	
+	def mouseDoubleClickEvent(self, QMouseEvent):
+		print('{}: mouseDoubleClickEvent'.format(self))
+		if QMouseEvent.buttons() & Qt.RightButton:
+			self.reset_index()
+		elif QMouseEvent.buttons() & Qt.LeftButton:
+			self.timeline_dialog()
+	
+	def mouseReleaseEvent(self, QMouseEvent):
+		print('{}: mouseReleaseEvent'.format(self))
+		if QMouseEvent.buttons() & Qt.RightButton:
+			return
+		cx = QMouseEvent.pos().x()
+		pos = QStyle.sliderValueFromPosition(
+			self.index_slider.minimum(),
+			self.index_slider.maximum(),
+			cx,
+			self.index_slider.width()
+		)
+		self.new_index_end = pos
+		if (self.new_index_start):
+			start = min(self.new_index_start, self.new_index_end)
+			end = max(self.new_index_start, self.new_index_end)
+			if (not start == end):
+				self.index_range_changed.emit(start, end)
+		self.new_index_end = None
+		self.new_index_start = None
+		self.mouseoverlay.cursor_end = None
+		self.mouseoverlay.cursor_start = None
+		self.mouseoverlay.update()
+	
+	def mouseMoveEvent(self, QMouseEvent):
+		self.mouseoverlay.cursor_end = QMouseEvent.pos()
+		self.mouseoverlay.update()
+	
+	def setTickInterval(self, tickint, *args, **kwargs):
+		self.index_slider.setTickInterval(tickint, *args, **kwargs)
+		for ah in self.ah_list:
+			ah.setTickInterval(tickint, *args, **kwargs)
+	
+	def setRange(self, start, end, *args, **kwargs):
+		for ah in self.ah_list:
+			ah.setRange(start, end, *args, **kwargs)
+	
+	def setTracking(self, *args, **kwargs):
+		for ah in self.ah_list:
+			ah.setTracking(*args, **kwargs)
+	
+	def setMinimum(self, m):
+		for ah in self.ah_list:
+			ah.setMinimum(m)
+	
+	def setMaximum(self, m):
+		for ah in self.ah_list:
+			ah.setMaximum(m)
+	
+	def update(self, *args):
+		super(AnnotationHighlighterWidget, self).update(*args)
+		for ah in self.ah_list:
+			ah.update()
+
+
+class MouseGrabOverlay(QWidget):
+	def __init__(self, *args, **kwargs):
+		super(MouseGrabOverlay, self).__init__(*args, **kwargs)
+		self.cursor_start = None
+		self.cursor_end = None
+		self.pen_color = QColor(0, 0, 255, 230)
+		self.brush_color = QColor(0, 0, 255, 50)
+	
+	def paintEvent(self, QPaintEvent):
+		p = QPainter(self)
+		p.setRenderHint(QPainter.Antialiasing)
+		# p.drawLine(self.rect().topLeft(), self.rect().bottomRight())
+		# p.drawLine(self.rect().bottomLeft(), self.rect().topRight())
+		if not self.cursor_start:
+			return
+		start = self.cursor_start
+		end = self.cursor_end
+		width = end.x() - start.x()
+		height = end.y() - start.y()
+		p.setPen(QPen(self.pen_color))
+		p.setBrush(self.brush_color)
+		p.drawRect(start.x(), start.y(), width, height)
+
+
+class IndexSliderWidget(QWidget):
+	index_range_changed = pyqtSignal(int, int)
+	
+	def __init__(self, index_slider, ah_list, timeline_dialog,
+	             reset_index
+	             ):
+		super(IndexSliderWidget, self).__init__()
+		listLayout = QVBoxLayout()
+		self.setLayout(listLayout)
+		self.index_slider = index_slider
+		listLayout.addWidget(index_slider)
+		listLayout.setSpacing(0)
+		listLayout.setMargin(0)
+		self.index_changed = self.index_slider.index_changed
+		self.anno_highlighter_widget = AnnotationHighlighterWidget(ah_list, self.index_slider,
+		                                                           self.index_range_changed,
+		                                                           timeline_dialog,
+		                                                           self.height(),
+		                                                           reset_index)
+		listLayout.addWidget(self.anno_highlighter_widget)
+	
+	@property
+	def ah_list(self):
+		return self.anno_highlighter_widget.ah_list
+	
+	@ah_list.setter
+	def ah_list(self, ah_list):
+		self.anno_highlighter_widget.ah_list = ah_list
+	
+	def setTickInterval(self, tickint, *args, **kwargs):
+		self.index_slider.setTickInterval(tickint, *args, **kwargs)
+		self.anno_highlighter_widget.setTickInterval(tickint, *args, **kwargs)
+	
+	def setRange(self, start, end, *args, **kwargs):
+		self.index_slider.setRange(start, end, *args, **kwargs)
+		self.anno_highlighter_widget.setRange(start, end, *args, **kwargs)
+	
+	def setTracking(self, *args, **kwargs):
+		self.index_slider.setTracking(*args, **kwargs)
+		self.anno_highlighter_widget.setTracking(*args, **kwargs)
+	
+	def setValue(self, val, *args, **kwargs):
+		self.index_slider.setValue(val, *args, **kwargs)
+	
+	def setMinimum(self, m):
+		self.index_slider.setMinimum(m)
+		self.anno_highlighter_widget.setMinimum(m)
+	
+	def setMaximum(self, m):
+		self.index_slider.setMaximum(m)
+		self.anno_highlighter_widget.setMaximum(m)
+	
+	def update(self, *args):
+		super(IndexSliderWidget, self).update(*args)
+		self.anno_highlighter_widget.update()
+
+
+class MainWindow(QMainWindow, WindowMixin):
+	FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = range(3)
+	# currently those variables cannot be changed without
+	# makeing changes in canvas.py. In future this will change
+	# todo: make those variables global to MainWindow and Canvas
+	MODE_BOX_ANNOTATION = 'box'
+	MODE_POLYGON_ANNOTATION = 'poly'
+	
+	def __init__(self, par):
+		super(MainWindow, self).__init__()
+		self.par = par
+		filename = self.par['annotation_dir']
+		self.setWindowTitle(__appname__)
+		self.filename = filename
+		self.hide_all_shapes = False
+		self.hide_all_labels = False
+		self.annotation_mode = self.MODE_BOX_ANNOTATION
+		self.propagation_mode = False
+		self.timelinelegenddiag = None
+		# Save as Pascal voc xml
+		self.lastlabel = 'unknown'
+		self.defaultSaveDir = None
+		self.usingPascalVocFormat = True
+		if self.usingPascalVocFormat:
+			LabelFile.suffix = '.xml'
+		# For loading all image under a directory
+		self.mImgList = []
+		self.dirname = None
+		self.labelHist = []
+		self.lastOpenDir = None
+		# Whether we need to save or not.
+		self.dirty = False
+		# Enable auto saving if pressing next
+		self.autoSaving = True
+		self._noSelectionSlot = False
+		self._beginner = True
+		self.screencastViewer = "firefox"
+		self.screencast = "https://youtu.be/p0nR2YsCY_U"
+		self.loadPredefinedClasses()
+		# Main widgets and related state.
+		# self.labelDialog = LabelDialog(parent=self, listItem=self.labelHist)
+		self.labelList = QListWidget()
+		self.itemsToShapes = {}
+		self.shapesToItems = {}
+		self.labelList.itemActivated.connect(self.labelSelectionChanged)
+		self.labelList.itemSelectionChanged.connect(self.labelSelectionChanged)
+		self.labelList.itemDoubleClicked.connect(self.editLabel)
+		# Connect to itemChanged to detect checkbox changes.
+		self.labelList.itemChanged.connect(self.labelItemChanged)
+		listLayout = QVBoxLayout()
+		listLayout.setContentsMargins(0, 0, 0, 0)
+		# listLayout.addWidget(self.labelList)
+		self.labelListContainer = QWidget()
+		self.labelListContainer.setLayout(listLayout)
+		listLayout.addWidget(self.labelList)
+		nav_layout = QVBoxLayout()
+		listHLayout = QHBoxLayout()
+		nav_layout.addLayout(listHLayout)
+		self.list_folder_nav = nav_layout
+		# start
+		listVLayout = QVBoxLayout()
+		listHLayout.setAlignment(Qt.AlignLeft)
+		self._start_index = 1
+		lineEdit = QLineEdit(str(self.start_index))
+		self.startImageTextEdit = lineEdit
+		# known bug from qt http://stackoverflow.com/a/29803296/1959528
+		lineEdit.editingFinished.connect(self.start_image_textedit_textchanged)
+		self.startImageTextEdit.setFixedWidth(40)
+		startImageLabel = QLabel('Start')
+		listVLayout.addWidget(startImageLabel)
+		listVLayout.addWidget(self.startImageTextEdit)
+		listHLayout.addLayout(listVLayout)
+		# steps
+		listVLayout = QVBoxLayout()
+		self._step_size_index = 1
+		self.nextImageStepTextEdit = QLineEdit(str(self.step_size_index))
+		self.nextImageStepTextEdit.setFixedWidth(40)
+		self.nextImageStepTextEdit.editingFinished.connect(self.step_index_image_textedit_textchanged)
+		nextImageStepText = QLabel('Steps')
+		listVLayout.addWidget(nextImageStepText)
+		listVLayout.addWidget(self.nextImageStepTextEdit)
+		listHLayout.addLayout(listVLayout)
+		# end index
+		listVLayout = QVBoxLayout()
+		self._end_index = 1
+		lineEdit = QLineEdit(str(self.end_index))
+		self.endImageTextEdit = lineEdit
+		lineEdit.editingFinished.connect(self.end_image_textedit_textchanged)
+		self.endImageTextEdit.setFixedWidth(40)
+		endImageStepText = QLabel('End')
+		listVLayout.addWidget(endImageStepText)
+		listVLayout.addWidget(self.endImageTextEdit)
+		listHLayout.addLayout(listVLayout)
+		listHLayout.addStretch(1)
+		# current index
+		listVLayout = QVBoxLayout()
+		self._cur_index = 1
+		lineEdit = QLineEdit(str(self.cur_index))
+		self.index_text_edit = lineEdit
+		# known bug from qt http://stackoverflow.com/a/29803296/1959528
+		# switched from editingFinished to returnPressed
+		# lineEdit.editingFinished.connect(self.index_textedit_textchanged)
+		lineEdit.editingFinished.connect(self.index_textedit_textchanged)
+		self.index_text_edit.setFixedWidth(40)
+		indexImageStepText = QLabel('Index')
+		listVLayout.addWidget(indexImageStepText)
+		listVLayout.addWidget(self.index_text_edit)
+		listHLayout.addLayout(listVLayout)
+		# reset button
+		listHLayout = QHBoxLayout()
+		nav_layout.addLayout(listHLayout)
+		reset_button = QPushButton('Reset range', self)
+		reset_button.clicked.connect(self.reset_index)
+		listHLayout.addWidget(reset_button)
+		listHLayout.addStretch(1)
+		
+		listLayout.addLayout(nav_layout)
+		self.dock = QDockWidget(u'Box Labels', self)
+		self.dock.setObjectName(u'Labels')
+		self.dock.setWidget(self.labelListContainer)
+		self.all_anno_highlighter = {}
+		self.dock_slider = QDockWidget('<span>Index: 1<\span>', self)
+		self.index_slider = IndexSlider(self.dock_slider, Qt.Horizontal, self)
+		self.index_slider_widget = IndexSliderWidget(self.index_slider, {}, self.timeline_dialog,
+		                                             self.reset_index)
+		self.index_slider_widget.setRange(1, 1)
+		self.index_slider_widget.index_changed.connect(self.index_slider_on_index_change)
+		self.index_slider_widget.setTracking(True)
+		self.dock_slider.setWidget(self.index_slider_widget)
+		# self.dock_slider.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
+		# self.dock_slider.layout().setSizeConstraint(QLayout.SetFixedSize)
+		self.dock_slider.setWidget(self.index_slider)
+		self.dock_slider.hide()
+		self.zoomWidget = ZoomWidget()
+		self.colorDialog = ColorDialog(parent=self)
+		self.canvas = Canvas(self.annotation_mode, self.setDirty)
+		self.canvas.delete_callbacks.append(self.poly_remove_point_shape)
+		self.canvas.zoomRequest.connect(self.zoomRequest)
+		scroll = QScrollArea()
+		self.scroll = scroll
+		self.mode_overlay = InformationOverlay(mode=(self.annotation_mode), propagation_mode=(self.propagation_mode),
+		                                       parent=self.scroll)
+		scroll.setWidget(self.canvas)
+		scroll.setWidgetResizable(True)
+		self.scrollBars = {
+			Qt.Vertical: scroll.verticalScrollBar(),
+			Qt.Horizontal: scroll.horizontalScrollBar()
+		}
+		self.canvas.scrollRequest.connect(self.scrollRequest)
+		self.canvas.scroll = scroll
+		self.canvas.newShape.connect(self.newShape)
+		self.canvas.shapeMoved.connect(self.setDirty)
+		self.canvas.selectionChanged.connect(self.shapeSelectionChanged)
+		self.canvas.drawingPolygon.connect(self.toggleDrawingSensitive)
+		self.setCentralWidget(scroll)
+		self.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+		self.addDockWidget(Qt.BottomDockWidgetArea, self.dock_slider)
+		self.dockFeatures = QDockWidget.DockWidgetClosable \
+		                    | QDockWidget.DockWidgetFloatable
+		self.dock.setFeatures(self.dock.features() ^ self.dockFeatures)
+		self.dock_slider.setFeatures(self.dock_slider.features() ^ self.dockFeatures)
+		# Actions
+		action = partial(new_action, self)
+		# General section
+		open = action('&Open Image', self.openFile,
+		              'ctrl+o', 'open', u'Open image or label file',
+		              section=HELP_SECTION_GENERAL)
+		open_im_list = action('&Open Imagelist', self.open_imagelist,
+		                      'ctrl+l', 'open', u'Open imagelist',
+		                      section=HELP_SECTION_GENERAL)
+		opendir = action('&Open Dir', self.openDir,
+		                 'ctrl+u', 'open', u'Open Dir',
+		                 section=HELP_SECTION_GENERAL)
+		save = action('&Save', self.force_saveFile,
+		              'ctrl+s', 'save', u'Save labels to file', enabled=False,
+		              section=HELP_SECTION_GENERAL)
+		saveAs = action('&Save As', self.saveFileAs,
+		                'ctrl+shift+s', 'save-as', u'Save labels to a different file',
+		                enabled=False,
+		                section=HELP_SECTION_GENERAL)
+		close = action('&Close', self.closeFile,
+		               None, 'close', u'Close current file',
+		               section=HELP_SECTION_GENERAL)
+		help_dialog = action('Show &Help dialog', self.help_dialog,
+		                     'H', 'help', u'Show help dialog',
+		                     enabled=True,
+		                     section=HELP_SECTION_GENERAL)
+		guideline_help = action('Labeling Guidelines', self.show_guidelines, 'ctrl+g', 'help',
+		                        u'Show guidelines', section=HELP_SECTION_GENERAL)
+		quit = action('&Quit', self.close,
+		              None, 'quit', u'Quit application',
+		              section=HELP_SECTION_GENERAL)
+		timeline_legend = action('&Timeline legend', self.timeline_dialog,
+		                         'ctrl+t', '',
+		                         section=HELP_SECTION_EDIT)
+		# Navigation
+		openNextImg = action('&Next Image', self.openNextImg,
+		                     'd', 'next', u'Open Next  Image',
+		                     section=HELP_SECTION_NAVIGATION)
+		openPrevImg = action('&Prev Image', self.openPrevImg,
+		                     'a', 'prev', u'Open Prev Image',
+		                     section=HELP_SECTION_NAVIGATION)
+		# openNextImgPropagate = action('Next Image and &propagate labels', partial(self.openNextImg, True),
+		#        'shift+d', 'next', u'Open Next and propagate labels',
+		#                              section=HELP_SECTION_NAVIGATION)
+		increase_step = action('&Increase step', self.increase_step,
+		                       'w', 'up', u'Increases step size', enabled=True,
+		                       section=HELP_SECTION_NAVIGATION)
+		decrease_step = action('&Decrease step', self.decrease_step,
+		                       's', 'down', u'Decrease step size', enabled=True,
+		                       section=HELP_SECTION_NAVIGATION)
+		# Edit
+		box_annotation_mode = action('&Box mode', self.set_box_annotation,
+		                             '1', 'boxmode', u'Enables box mode', enabled=False,
+		                             section=HELP_SECTION_EDIT)
+		poly_annotation_mode = action('&Polygon mode', self.set_poly_annotation,
+		                              '2', 'polymode', u'Enables polygon mode', enabled=True,
+		                              section=HELP_SECTION_EDIT)
+		toggle_ignore = action('Toggle &Ignore box label', self.toggle_ignore,
+		                       'i', 'boxignore', u'Toggle Ignore of label',
+		                       section=HELP_SECTION_EDIT)
+		toggle_propagation = action('Toggle &propagation mode', self.toggle_propagation_mode,
+		                            'ctrl+d', 'propagationmode', u'Toggle propagation mode',
+		                            section=HELP_SECTION_EDIT)
+		delete = action('Delete shape/vertex', self.poly_remove_point_shape,
+		                'delete', 'delete', u'Delete', enabled=False,
+		                section=HELP_SECTION_EDIT)
+		copy = action('&Duplicate shape', self.copySelectedShape,
+		              'ctrl+c', 'copy', u'Create a duplicate of the selected Shape',
+		              enabled=False,
+		              section=HELP_SECTION_EDIT)
+		toggle_difficult_level_fwd = action('Toggle difficult level forwards', partial(self.toggle_difficult_level, 1),
+		                                    'q', 'dificult_level', u'Toggle difficult level forwards',
+		                                    enabled=True,
+		                                    section=HELP_SECTION_EDIT)
+		toggle_difficult_level_bwd = action('Toggle difficult level backwards',
+		                                    partial(self.toggle_difficult_level, -1),
+		                                    'ctrl+q', 'dificult_level', u'Toggle difficult level backwards',
+		                                    enabled=True,
+		                                    section=HELP_SECTION_EDIT)
+		toggle_label_fwd = action('Loop through labels forwards', partial(self.toggle_label_name, 1),
+		                          'e', 'loop_label', u'Loop through labels',
+		                          enabled=True,
+		                          section=HELP_SECTION_EDIT)
+		toggle_label_bwd = action('Loop through labels backwards', partial(self.toggle_label_name, -1),
+		                          'ctrl+e', 'loop_label', u'Loop through labels',
+		                          enabled=True,
+		                          section=HELP_SECTION_EDIT)
+		hideAll = action('&Hide/show shapes', self.togglePolygons,
+		                 'ctrl+r', 'hide', u'Hide/show shapes',
+		                 enabled=True,
+		                 section=HELP_SECTION_VIEW)
+		toggle_hid_label_action = action('&Hide/show labels on shape', self.toggle_hid_label,
+		                                 'r', 'hide', u'Hide/show labels on shape',
+		                                 enabled=True,
+		                                 section=HELP_SECTION_VIEW)
+		version = action('Version: {}'.format(__version__))
+		zoom = QWidgetAction(self)
+		zoom.setDefaultWidget(self.zoomWidget)
+		self.zoomWidget.setWhatsThis(
+			u"Zoom in or out of the image. Also accessible with" \
+			" %s and %s from the canvas." % (fmtShortcut("Ctrl+[-+]"),
+			                                 fmtShortcut("Ctrl+Wheel")))
+		self.zoomWidget.setEnabled(False)
+		zoomIn = action('Zoom &In', partial(self.zoomRequest, 120),
+		                'ctrl++', 'zoom-in', u'Increase zoom level', enabled=False,
+		                section=HELP_SECTION_VIEW)
+		zoomOut = action('&Zoom Out', partial(self.zoomRequest, -120),
+		                 'ctrl+-', 'zoom-out', u'Decrease zoom level', enabled=False,
+		                 section=HELP_SECTION_VIEW)
+		fitWindow = action('&Fit Window', self.setFitWindow,
+		                   'ctrl+f', 'fit-window', u'Zoom follows window size',
+		                   checkable=True, enabled=False,
+		                   section=HELP_SECTION_VIEW)
+		fitWidth = action('Fit &Width', self.setFitWidth,
+		                  'ctrl+shift+f', 'fit-width', u'Zoom follows window width',
+		                  checkable=True, enabled=False,
+		                  section=HELP_SECTION_VIEW)
+		# Group zoom controls into a list for easier toggling.
+		zoomActions = (self.zoomWidget, zoomIn, zoomOut, fitWindow, fitWidth)
+		self.zoomMode = self.MANUAL_ZOOM
+		self.scalers = {
+			self.FIT_WINDOW: self.scaleFitWindow,
+			self.FIT_WIDTH: self.scaleFitWidth,
+			# Set to one to scale to 100% when loading files.
+			self.MANUAL_ZOOM: lambda: 1,
+		}
+		edit = action('&Edit Label', self.editLabel,
+		              'shift+ctrl+e', 'edit', u'Modify the label of the selected Box',
+		              enabled=False,
+		              section=HELP_SECTION_EDIT)
+		shapeLineColor = action('Shape &Line Color', self.chshapeLineColor,
+		                        icon='color_line', tip=u'Change the line color for this specific shape',
+		                        enabled=False)
+		shapeFillColor = action('Shape &Fill Color', self.chshapeFillColor,
+		                        icon='color', tip=u'Change the fill color for this specific shape',
+		                        enabled=False)
+		labels = self.dock.toggleViewAction()
+		# Lavel list context menu.
+		labelMenu = QMenu()
+		addActions(labelMenu, (edit, delete))
+		self.labelList.setContextMenuPolicy(Qt.CustomContextMenu)
+		self.labelList.customContextMenuRequested.connect(self.popLabelListMenu)
+		# Store actions for further handling.
+		self.actions = struct(save=save, saveAs=saveAs, open=open, close=close,
+		                      help_dialog=help_dialog,
+		                      delete=delete, edit=edit, copy=copy,
+		                      shapeLineColor=shapeLineColor, shapeFillColor=shapeFillColor,
+		                      zoom=zoom, zoomIn=zoomIn, zoomOut=zoomOut,
+		                      fitWindow=fitWindow, fitWidth=fitWidth,
+		                      zoomActions=zoomActions,
+		                      box_annotation_mode=box_annotation_mode,
+		                      poly_annotation_mode=poly_annotation_mode,
+		                      fileMenuActions=(open, open_im_list, opendir, save, saveAs, close, quit),
+		                      beginner=(), advanced=(),
+		                      editMenu=(edit, copy, delete, box_annotation_mode, poly_annotation_mode,
+		                                increase_step, decrease_step, openNextImg, openPrevImg,
+		                                toggle_ignore, toggle_difficult_level_fwd, toggle_difficult_level_bwd,
+		                                toggle_label_fwd, toggle_label_bwd, toggle_propagation),
+		                      beginnerContext=(
+			                      # create,
+			                      edit, copy, delete),
+		                      advancedContext=(
+			                      # createMode, editMode,
+			                      edit, copy,
+			                      delete, shapeLineColor, shapeFillColor),
+		                      onLoadActive=(close,
+		                                    # create,
+		                                    # createMode,
+		                                    # editMode
+		                                    ),
+		                      onShapesPresent=(saveAs, hideAll))
+		self.menus = struct(
+			file=self.menu('&File'),
+			edit=self.menu('&Edit'),
+			view=self.menu('&View'),
+			help=self.menu('&Help'),
+			recentFiles=QMenu('Open &Recent'),
+			labelList=labelMenu)
+		addActions(self.menus.file,
+		           (open, open_im_list, opendir, self.menus.recentFiles, save, saveAs, close, None, quit))
+		addActions(self.menus.help, (guideline_help, help_dialog, version))
+		addActions(self.menus.view, (
+			labels, None,
+			hideAll, toggle_hid_label_action, None,
+			zoomIn, zoomOut, None,
+			fitWindow, fitWidth, None, timeline_legend))
+		self.menus.file.aboutToShow.connect(self.updateFileMenu)
+		# Custom context menu for the canvas widget:
+		addActions(self.canvas.menus[0], self.actions.beginnerContext)
+		addActions(self.canvas.menus[1], (
+			action('&Copy here', self.copyShape),
+			action('&Move here', self.moveShape)))
+		self.tools = self.toolbar('Tools')
+		self.tools.hide()
+		self.actions.beginner = (
+			open, opendir, openNextImg, openPrevImg, save, None, copy, delete, None,
+			toggle_ignore, toggle_propagation, zoomIn, zoom, zoomOut, fitWindow, fitWidth)
+		self.actions.advanced = (
+			open, save, None,
+			# createMode, editMode,
+			None)
+		self.statusBar().showMessage('%s started.' % __appname__)
+		self.statusBar().show()
+		# Application state.
+		self.image = QImage()
+		self.recentFiles = []
+		self.maxRecent = 7
+		self.lineColor = None
+		self.fillColor = None
+		self.zoom_level = 100
+		self.fit_window = False
+		# XXX: Could be completely declarative.
+		# Restore application settings.
+		types = {
+			'filename': QString,
+			'recentFiles': QStringList,
+			'window/size': QSize,
+			'window/position': QPoint,
+			'window/geometry': QByteArray,
+			# Docks and toolbars:
+			'window/state': QByteArray,
+			'savedir': QString,
+			'lastOpenDir': QString,
+		}
+		self.settings = settings = Settings(types)
+		self.recentFiles = list(settings['recentFiles'])
+		size = settings.get('window/size', QSize(600, 500))
+		position = settings.get('window/position', QPoint(0, 0))
+		self.resize(size)
+		self.move(position)
+		# saveDir = settings.get('savedir', None)
+		saveDir = os.path.basename(self.filename) if self.filename is not None else None
+		self.lastOpenDir = settings.get('lastOpenDir', None)
+		if os.path.exists(unicode(saveDir)):
+			self.defaultSaveDir = unicode(saveDir)
+			self.statusBar().showMessage(
+				'%s started. Annotation will be saved to %s' % (__appname__, self.get_annotation_dir()))
+			self.statusBar().show()
+		# or simply:
+		# self.restoreGeometry(settings['window/geometry']
+		self.restoreState(settings['window/state'])
+		self.restoreState(settings['window/state'])
+		self.lineColor = QColor(settings.get('line/color', Shape.line_color))
+		self.fillColor = QColor(settings.get('fill/color', Shape.fill_color))
+		Shape.line_color = self.lineColor
+		Shape.fill_color = self.fillColor
+		if settings.get('advanced', QVariant()).toBool():
+			self.actions.advancedMode.setChecked(True)
+			self.toggleAdvancedMode()
+		# Populate the File menu dynamically.
+		self.updateFileMenu()
+		# Since loading the file may take some time, make sure it runs in the background.
+		# self.queueEvent(partial(self.loadFile, self.filename))
+		self.loadFile(self.filename)
+		# Callbacks:
+		self.zoomWidget.valueChanged.connect(self.paintCanvas)
+		self.populateModeActions()
+		self.copiedShape = None
+		self.toggle_annotation_mode(self.MODE_BOX_ANNOTATION)
+		self.help_diag = HelpDialog(KEYBOARD_SHORTCUTS)
+		# temporally override
+		self.hide_folder_nav()
+	
+	## Support Functions ##
+	def force_saveFile(self):
+		self.setDirty()
+		self.saveFile()
+	
+	@pyqtSlot()
+	def reset_index(self):
+		self.set_start_index(1)
+		self.set_end_index(len(self.mImgList))
+	
+	def timeline_dialog(self):
+		anno_list = []
+		for ah in self.index_slider_widget.ah_list:
+			name = ah.label
+			status = ah.isVisible()
+			color = ah.tick_color
+			num = np.asarray(ah.frame_index).sum()
+			anno_list.append((name, status, color, num))
+		self.timelinelegenddiag = TimelineLegendDialog(anno_list)
+		self.timelinelegenddiag.values_changed.connect(self.on_timeline_item_chaned)
+		self.timelinelegenddiag.show()
+	
+	@pyqtSlot(str, bool)
+	def on_timeline_item_chaned(self, name, state):
+		# fixme: dock widget does not resize correctly
+		ah = self.all_anno_highlighter[str(name)]
+		ah.setVisible(state)
+	
+	@pyqtSlot(int)
+	def index_slider_on_index_change(self, val):
+		index = val
+		ret, index = self.bounded_open_img_update_index(index)
+		if not ret:
+			self.index_slider_widget.setValue(index)
+	
+	def show_guidelines(self):
+		print 'show_guidelines', sys.platform
+		if sys.platform.startswith('win'):
+			os.startfile('Labeling_Guidelines.docx')
+		else:
+			print 'currently not supported'
+	
+	def toggle_ignore(self):
+		shape = self.canvas.selectedShape
+		if shape is not None and type(shape) is Box:
+			shape.ignore = not shape.ignore
+			if shape.ignore:
+				self.shape_change_label(shape, 'signal_ignore')
+			self.setDirty()
+			self.canvas.repaint()
+	
+	def toggle_propagation_mode(self):
+		self.propagation_mode = not self.propagation_mode
+		self.mode_overlay.update_mode(self.annotation_mode, self.propagation_mode, self.filename)
+	
+	def noShapes(self):
+		return not self.itemsToShapes
+	
+	def increase_step(self, ):
+		inc = 5
+		self.step_size_index = self.nextImageStepTextEdit.text()
+		new_step = self.step_size_index
+		if new_step == 1:
+			new_step = inc
+		else:
+			new_step += inc
+		self.step_size_index = new_step
+		self.nextImageStepTextEdit.setText(str(self.step_size_index))
+	
+	def decrease_step(self, ):
+		dec = 5
+		new_step = int(self.nextImageStepTextEdit.text()) - dec
+		new_step = max(1, new_step)
+		self.step_size_index = new_step
+		self.nextImageStepTextEdit.setText(str(self.step_size_index))
+	
+	@pyqtSlot()
+	def index_textedit_textchanged(self):
+		if self.filename is None:
+			return
+		self.cur_index = self.index_text_edit.text()
+		new_index = self.cur_index
+		new_index = max(new_index, 0)
+		try:
+			cur_index = self.mImgList.index(self.filename)
+		except ValueError:
+			cur_index = -1
+		if new_index == cur_index:
+			return
+		# if not self.mayContinue():
+		#     return
+		self.bounded_open_img_update_index(new_index)
+	
+	@pyqtSlot()
+	def step_index_image_textedit_textchanged(self):
+		self.step_size_index = self.nextImageStepTextEdit.text()
+		self.nextImageStepTextEdit.setText(str(self.step_size_index))
+	
+	@pyqtSlot()
+	def end_image_textedit_textchanged(self):
+		if self.filename is None:
+			return
+		cur_idx = self.cur_index
+		self.end_index = self.endImageTextEdit.text()
+		self.index_slider_widget.setMaximum(self.end_index)
+		new_idx = min(cur_idx, self.end_index)
+		self.bounded_open_img_update_index(new_idx)
+		if new_idx >= len(self.mImgList):
+			print "Warning: End is bigger than number frames: {}/{}".format(self.end_index, len(self.mImgList))
+			self.end_index = len(self.mImgList)
+	
+	@property
+	def start_index(self):
+		return self._start_index
+	
+	@start_index.setter
+	def start_index(self, ind):
+		self._start_index = self.get_pos_int_in_range_image_list(ind, self._start_index)
+		self.startImageTextEdit.setText(str(self._start_index))
+	
+	@property
+	def step_size_index(self):
+		return self._step_size_index
+	
+	@step_size_index.setter
+	def step_size_index(self, stepsize):
+		# keep old value when new not valid
+		self._step_size_index = self.get_pos_int_in_range_image_list(stepsize, self._step_size_index)
+	
+	@property
+	def cur_index(self):
+		return self._cur_index
+	
+	@cur_index.setter
+	def cur_index(self, index):
+		self._cur_index = self.get_pos_int_in_range_image_list(index, self._cur_index)
+		self.index_text_edit.setText(str(self._cur_index))
+		self.index_slider_widget.setValue(self._cur_index)
+	
+	@property
+	def end_index(self):
+		return self._end_index
+	
+	@end_index.setter
+	def end_index(self, ind):
+		self._end_index = self.get_pos_int_in_range_image_list(ind, self._end_index)
+		self.endImageTextEdit.setText(str(self._end_index))
+	
+	def get_pos_int_in_range_image_list(self, val, default):
+		try:
+			max_val = len(self.mImgList)
+		except TypeError:
+			max_val = 1
+		return self.get_pos_int_in_range(val, default, max_val)
+	
+	def get_pos_int_in_range(self, val, default, max_val=None):
+		rv = default
+		try:
+			val = int(val)
+			if val < 1:
+				val = default
+			if max_val is not None and val > max_val:
+				val = default
+			rv = val
+		except ValueError:
+			pass
+		return rv
+	
+	@pyqtSlot()
+	def start_image_textedit_textchanged(self):
+		if self.filename is None:
+			return
+		cur_idx = self.cur_index
+		self.start_index = self.startImageTextEdit.text()
+		new_idx = max(cur_idx, self.start_index)
+		self.index_slider_widget.setMinimum(self.start_index)
+		self.bounded_open_img_update_index(new_idx)
+		if new_idx >= len(self.mImgList):
+			print "Warning: Start is bigger than number frames: {}/{}".format(self.start_index, len(self.mImgList))
+			self.start_index = 1
+	
+	def toggleAdvancedMode(self, value=True):
+		self._beginner = not value
+		self.canvas.setEditing(True)
+		self.populateModeActions()
+		self.editButton.setVisible(not value)
+		if value:
+			# self.actions.createMode.setEnabled(True)
+			self.actions.editMode.setEnabled(False)
+			self.dock.setFeatures(self.dock.features() | self.dockFeatures)
+		else:
+			self.dock.setFeatures(self.dock.features() ^ self.dockFeatures)
+	
+	def populateModeActions(self):
+		if self.beginner():
+			tool, menu = self.actions.beginner, self.actions.beginnerContext
+		else:
+			tool, menu = self.actions.advanced, self.actions.advancedContext
+		self.tools.clear()
+		addActions(self.tools, tool)
+		self.canvas.menus[0].clear()
+		addActions(self.canvas.menus[0], menu)
+		self.menus.edit.clear()
+		# actions = (self.actions.create,) if self.beginner()\
+		#         else (self.actions.createMode, self.actions.editMode)
+		actions = ()
+		addActions(self.menus.edit, actions + self.actions.editMenu)
+	
+	def setBeginner(self):
+		self.tools.clear()
+		addActions(self.tools, self.actions.beginner)
+	
+	def setAdvanced(self):
+		self.tools.clear()
+		addActions(self.tools, self.actions.advanced)
+	
+	@pyqtSlot()
+	def setDirty(self):
+		self.dirty = True
+		self.actions.save.setEnabled(True)
+	
+	def setClean(self):
+		self.dirty = False
+	
+	# self.actions.save.setEnabled(False)
+	# self.actions.create.setEnabled(True)
+	def toggleActions(self, value=True):
+		"""Enable/Disable widgets which depend on an opened image."""
+		for z in self.actions.zoomActions:
+			z.setEnabled(value)
+		for action in self.actions.onLoadActive:
+			action.setEnabled(value)
+	
+	def queueEvent(self, function):
+		QTimer.singleShot(0, function)
+	
+	def status(self, message, delay=2500):
+		self.statusBar().showMessage(message, delay)
+	
+	def resetState(self):
+		self.itemsToShapes.clear()
+		self.shapesToItems.clear()
+		self.labelList.clear()
+		self.filename = None
+		self.imageData = None
+		self.labelFile = None
+		self.canvas.resetState()
+	
+	def all_reset(self):
+		self.resetState()
+		self.end_index = 1
+		self.endImageTextEdit.update()
+		self.start_index = 1
+		self.startImageTextEdit.update()
+		self.step_size_index = 1
+		self.nextImageStepTextEdit.setText(str(self.step_size_index))
+		self.nextImageStepTextEdit.update()
+		self.cur_index = 1
+		self.index_text_edit.update()
+		self.index_slider_widget.setValue(self.cur_index)
+		self.mImgList = []
+		self.defaultSaveDir = None
+		self.filename = None
+	
+	def currentItem(self):
+		items = self.labelList.selectedItems()
+		if items:
+			return items[0]
+		return None
+	
+	def addRecentFile(self, filename):
+		if filename in self.recentFiles:
+			self.recentFiles.remove(filename)
+		elif len(self.recentFiles) >= self.maxRecent:
+			self.recentFiles.pop()
+		self.recentFiles.insert(0, filename)
+	
+	def beginner(self):
+		return self._beginner
+	
+	def advanced(self):
+		return not self.beginner()
+	
+	## Callbacks ##
+	def tutorial(self):
+		subprocess.Popen([self.screencastViewer, self.screencast])
+	
+	def createShape(self):
+		assert self.beginner()
+		self.canvas.setEditing(False)
+	
+	# self.actions.create.setEnabled(False)
+	@pyqtSlot(bool)
+	def toggleDrawingSensitive(self, drawing=True):
+		"""In the middle of drawing, toggling between modes should be disabled."""
+		self.actions.editMode.setEnabled(not drawing)
+		if not drawing and self.beginner():
+			# Cancel creation.
+			print 'Cancel creation.'
+			self.canvas.setEditing(True)
+			self.canvas.restoreCursor()
+		# self.actions.create.setEnabled(True)
+	
+	def toggleDrawMode(self, edit=True):
+		self.canvas.setEditing(edit)
+		# self.actions.createMode.setEnabled(edit)
+		self.actions.editMode.setEnabled(not edit)
+	
+	def setCreateMode(self):
+		assert self.advanced()
+		self.toggleDrawMode(False)
+	
+	def toggle_annotation_mode(self, mode):
+		if self.canvas.current is not None:
+			self.canvas.finalise()
+		self.copiedShape = None
+		self.canvas.copiedShape = None
+		if mode == self.MODE_BOX_ANNOTATION:
+			self.actions.box_annotation_mode.setEnabled(False)
+			self.actions.poly_annotation_mode.setEnabled(True)
+		elif mode == self.MODE_POLYGON_ANNOTATION:
+			self.actions.box_annotation_mode.setEnabled(True)
+			self.actions.poly_annotation_mode.setEnabled(False)
+		else:
+			raise RuntimeError('mode {} not known'.format(mode))
+		self.canvas.deSelectShape()
+		self.annotation_mode = mode
+		self.canvas.annotation_mode = self.annotation_mode
+		self.canvas.update_active_mode()
+		self.repaint()
+		self.mode_overlay.update_mode(self.annotation_mode, self.propagation_mode, self.filename)
+		self.disable_items()
+	
+	def disable_items(self, mode=None):
+		if mode is None:
+			mode = self.annotation_mode
+		# disable/enable items depending on mode
+		shape_type = None
+		if mode == self.MODE_BOX_ANNOTATION:
+			shape_type = Box
+		elif mode == self.MODE_POLYGON_ANNOTATION:
+			shape_type = Poly
+		for i in range(self.labelList.count()):
+			item = self.labelList.item(i)
+			shape = self.itemsToShapes[item]
+			if (type(shape) is shape_type):
+				item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable)
+			else:
+				item.setFlags(Qt.NoItemFlags)
+	
+	def set_box_annotation(self):
+		self.toggle_annotation_mode(self.MODE_BOX_ANNOTATION)
+	
+	def set_poly_annotation(self):
+		self.toggle_annotation_mode(self.MODE_POLYGON_ANNOTATION)
+	
+	@pyqtSlot()
+	def updateFileMenu(self):
+		current = self.filename
+		
+		def exists(filename):
+			return os.path.exists(unicode(filename))
+		
+		menu = self.menus.recentFiles
+		menu.clear()
+		files = [f for f in self.recentFiles if f != current and exists(f)]
+		for i, f in enumerate(files):
+			icon = newIcon('labels')
+			action = QAction(
+				icon, '&%d %s' % (i + 1, QFileInfo(f).fileName()), self)
+			action.triggered.connect(partial(self.loadRecent, f))
+			menu.addAction(action)
+	
+	@pyqtSlot()
+	def popLabelListMenu(self, point):
+		self.menus.labelList.exec_(self.labelList.mapToGlobal(point))
+	
+	@pyqtSlot(QListWidgetItem)
+	def editLabel(self, item=None):
+		if not self.canvas.editing():
+			return
+		item = item if item else self.currentItem()
+		# text = self.labelDialog.popUp(item.text())
+		text = LabelDialog(parent=self, listItem=self.labelHist, mode=self.annotation_mode).popUp(item.text())
+		if text is not None:
+			item.setText(text)
+			self.setDirty()
+	
+	# React to canvas signals.
+	@pyqtSlot(bool)
+	def shapeSelectionChanged(self, selected=False):
+		if self._noSelectionSlot:
+			self._noSelectionSlot = False
+		else:
+			shape = self.canvas.selectedShape
+			if shape is not None:
+				self.labelList.setItemSelected(self.shapesToItems[shape], True)
+			else:
+				self.labelList.clearSelection()
+		self.actions.delete.setEnabled(selected)
+		self.actions.copy.setEnabled(selected)
+		self.actions.edit.setEnabled(selected)
+		self.actions.shapeLineColor.setEnabled(selected)
+		self.actions.shapeFillColor.setEnabled(selected)
+		print 'shapeSelectionChanged'
+	
+	def addLabel(self, shape):
+		item = QListWidgetItem(shape.label)
+		item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+		item.setCheckState(Qt.Checked)
+		self.itemsToShapes[item] = shape
+		self.shapesToItems[shape] = item
+		self.labelList.addItem(item)
+		for action in self.actions.onShapesPresent:
+			action.setEnabled(True)
+	
+	def remLabel(self, shape):
+		item = self.shapesToItems[shape]
+		self.labelList.takeItem(self.labelList.row(item))
+		del self.shapesToItems[shape]
+		del self.itemsToShapes[item]
+	
+	def loadLabels(self, shapes):
+		s = []
+		for label_type, label, points, line_color, fill_color, ignore, difficult in shapes:
+			if label_type == BOX_XML:
+				shape = Box(self.setDirty, label=label)
+			else:
+				shape = Poly(self.setDirty, label=label)
+			for x, y in points:
+				shape.addPoint(QPointF(x, y))
+			shape.close()
+			shape.ignore = ignore
+			shape.difficult = difficult
+			s.append(shape)
+			self.addLabel(shape)
+			if line_color:
+				shape.line_color = QColor(*line_color)
+			if fill_color:
+				shape.fill_color = QColor(*fill_color)
+		self.canvas.loadShapes(s)
+		self.setClean()  # clean dirty because we just loaded labels
+	
+	def saveLabels(self, filename, ask_for_overwrite=False):
+		lf = LabelFile()
+		
+		def format_shape(s):
+			return dict(label=unicode(s.label),
+			            line_color=s.line_color.getRgb() \
+				            if s.line_color != self.lineColor else None,
+			            fill_color=s.fill_color.getRgb() \
+				            if s.fill_color != self.fillColor else None,
+			            points=[(p.x(), p.y()) for p in s.points],
+			            label_type=type(s),
+			            ignore=s.ignore,
+			            difficult=s.difficult
+			            )
+		
+		shapes = [format_shape(shape) for shape in self.canvas.shapes]
+		# Can add different annotation formats here
+		try:
+			if self.usingPascalVocFormat is True:
+				print 'savePascalVocFormat save to:' + filename
+				lf.savePascalVocFormat(filename, shapes, unicode(self.filename), self.imageData,
+				                       self.lineColor.getRgb(), self.fillColor.getRgb(),
+				                       ask_for_overwrite=ask_for_overwrite)
+			else:
+				lf.save(filename, shapes, unicode(self.filename), self.imageData,
+				        self.lineColor.getRgb(), self.fillColor.getRgb())
+				self.labelFile = lf
+				self.filename = filename
+			return True
+		except LabelFileError, e:
+			self.errorMessage(u'Error saving label data',
+			                  u'<b>%s</b>' % e)
+			return False
+	
+	def copySelectedShape(self):
+		self.copiedShape = self.canvas.copySelectedShape()
+		if self.copiedShape is None:
+			self.status('You have to select shape before copy')
+		else:
+			self.status('shaped {} copied'.format(self.copiedShape.label))
+	
+	@pyqtSlot()
+	def labelSelectionChanged(self):
+		item = self.currentItem()
+		if item and self.canvas.editing():
+			self._noSelectionSlot = True
+			shape = self.itemsToShapes[item]
+			if (self.annotation_mode == self.MODE_POLYGON_ANNOTATION and type(shape) is Poly or
+						    self.annotation_mode == self.MODE_BOX_ANNOTATION and type(shape) is Box
+			    ):
+				self.canvas.selectShape(shape)
+	
+	@pyqtSlot(QListWidgetItem)
+	def labelItemChanged(self, item):
+		shape = self.itemsToShapes[item]
+		label = unicode(item.text())
+		if label != shape.label:
+			shape.label = unicode(item.text())
+			self.setDirty()
+		else:  # User probably changed item visibility
+			self.canvas.setShapeVisible(shape, item.checkState() == Qt.Checked)
+	
+	## Callback functions:
+	@pyqtSlot()
+	def newShape(self):
+		"""Pop-up and give focus to the label editor.
+        position MUST be in global coordinates.
+        """
+		text = self.copiedShape.label if self.copiedShape is not None else 'undefined'
+		if text is not None:
+			self.addLabel(self.canvas.setLastLabel(text))
+			self.update_anno_highlighter()
+			if self.beginner():  # Switch to edit mode.
+				self.canvas.setEditing(True)
+			# self.actions.create.setEnabled(True)
+			else:
+				self.actions.editMode.setEnabled(True)
+			self.setDirty()
+		else:
+			# self.canvas.undoLastLine()
+			self.canvas.resetAllLines()
+	
+	@pyqtSlot(float, int)
+	def scrollRequest(self, delta, orientation):
+		units = - delta / (8 * 15)
+		bar = self.scrollBars[orientation]
+		bar.setValue(bar.value() + bar.singleStep() * units)
+	
+	def setZoom(self, scale):
+		cpos = QCursor.pos()
+		vscrollbar = self.scroll.verticalScrollBar()
+		hscrollbar = self.scroll.horizontalScrollBar()
+		# print '='*80
+		self.actions.fitWidth.setChecked(False)
+		self.actions.fitWindow.setChecked(False)
+		self.zoomMode = self.MANUAL_ZOOM
+		# get values which will change after zooming
+		old_can_width, old_can_height = self.canvas.width(), self.canvas.height()
+		pix_can_offset = self.canvas.offsetToCenter()
+		self.zoomWidget.setValue(self.zoomWidget.value() * scale)  # do the zoom
+		# return  # disabled zoom to cursor because not working
+		view_pos = self.scroll.viewport().mapFromGlobal(cpos)
+		# get new values
+		can_width, can_height = self.canvas.width(), self.canvas.height()
+		# calculate the actual scaling
+		x_scale = float(can_width) / old_can_width
+		y_scale = float(can_height) / old_can_height
+		if not can_width == old_can_width:
+			can_shift_x = float(view_pos.x() * (x_scale - 1.0))
+			hval = hscrollbar.value()
+			hval *= x_scale
+			newhval = hval + can_shift_x - pix_can_offset.x()
+			hscrollbar.setValue(newhval)
+		if not can_height == old_can_height:
+			can_shift_y = float(view_pos.y() * (y_scale - 1.0))
+			vval = vscrollbar.value()
+			vval *= y_scale
+			newvval = vval + can_shift_y - pix_can_offset.y()
+			vscrollbar.setValue(newvval)
+	
+	def addZoom(self, increment=10):
+		self.setZoom(self.zoomWidget.value() + increment)
+	
+	@pyqtSlot(float)
+	def zoomRequest(self, delta):
+		units = float(delta / (8 * 15) * 1.2)
+		units = np.abs(1 / units) if units < 0 else units
+		# scale = 10+100*float(self.scroll.horizontalScrollBar().maximum())/9000
+		self.setZoom(units)  # divide by step size of wheel
+	
+	def setFitWindow(self, value=True):
+		if value:
+			self.actions.fitWidth.setChecked(False)
+		self.zoomMode = self.FIT_WINDOW if value else self.MANUAL_ZOOM
+		self.adjustScale()
+	
+	def setFitWidth(self, value=True):
+		if value:
+			self.actions.fitWindow.setChecked(False)
+		self.zoomMode = self.FIT_WIDTH if value else self.MANUAL_ZOOM
+		self.adjustScale()
+	
+	def toggle_difficult_level(self, inc):
+		shape = self.canvas.selectedShape
+		if shape is not None:
+			shape.difficult = (shape.difficult + inc) % len(Shape.DIFFICULT_LEVELS)
+			self.canvas.update()
+	
+	def toggle_label_name(self, inc):
+		shape = self.canvas.selectedShape
+		if shape is not None:
+			labels = self.get_available_labels()
+			try:
+				label = labels[(labels.index(shape.label) + inc) % len(labels)]
+			except ValueError:
+				label = labels[0]
+			self.shape_change_label(shape, label)
+	
+	def shape_change_label(self, shape, label):
+		shape.label = label
+		self.shapesToItems[shape].setText(label)
+		self.canvas.update()
+		self.update_anno_highlighter()
+	
+	def get_available_labels(self, ):
+		labels = []
+		for l in self.labelHist:
+			try:
+				mode, label = l.split(':')
+			except ValueError:
+				label = l
+				mode = None
+			if mode == self.annotation_mode:
+				labels.append(label)
+		return labels
+	
+	def help_dialog(self):
+		# toggle help dialog
+		if self.help_diag.isVisible():
+			self.help_diag.hide()
+		else:
+			self.help_diag.popUp()
+	
+	def togglePolygons(self):
+		self.hide_all_shapes = not self.hide_all_shapes
+		value = not self.hide_all_shapes
+		for item, shape in self.itemsToShapes.iteritems():
+			item.setCheckState(Qt.Checked if value else Qt.Unchecked)
+	
+	def toggle_hid_label(self):
+		self.hide_all_labels = not self.hide_all_labels
+		for s in self.canvas.shapes:
+			s.hide_label = self.hide_all_labels
+		self.canvas.update()
+		self.canvas.shape_hide_label = self.hide_all_labels
+	
+	def loadFile(self, filename=None):
+		"""Load the specified file, or the last opened file if None."""
+		self.resetState()
+		self.canvas.setEnabled(False)
+		if filename is None:
+			filename = self.settings['filename']
+		filename = unicode(filename)
+		if filename.endswith('.xml'):
+			_filename = self.get_imagepath_from_annotation(filename)
+			if not os.path.exists(_filename):
+				_path = os.path.join(os.path.dirname(filename),
+				                     os.pardir)
+				imfolder = unicode(QFileDialog.getExistingDirectory(self,
+				                                                    '%s - Select image folder' % __appname__,
+				                                                    _path,
+				                                                    QFileDialog.ShowDirsOnly
+				                                                    | QFileDialog.DontResolveSymlinks))
+				_filename = self.get_imagepath_from_annotation(filename, imfolder)
+			filename = _filename
+		if QFile.exists(filename):
+			if LabelFile.isLabelFile(filename):
+				try:
+					self.labelFile = LabelFile(filename)
+				except LabelFileError, e:
+					self.errorMessage(u'Error opening file',
+					                  (u"<p><b>%s</b></p>"
+					                   u"<p>Make sure <i>%s</i> is a valid label file.") \
+					                  % (e, filename))
+					self.status("Error reading %s" % filename)
+					return False
+				self.imageData = self.labelFile.imageData
+				self.lineColor = QColor(*self.labelFile.lineColor)
+				self.fillColor = QColor(*self.labelFile.fillColor)
+			else:
+				# Load image:
+				# read data first and store for saving into label file.
+				self.imageData = read(filename, None)
+				self.labelFile = None
+			image = QImage.fromData(self.imageData)
+			if image.isNull():
+				self.errorMessage(u'Error opening file',
+				                  u"<p>Make sure <i>%s</i> is a valid image file." % filename)
+				self.status("Error reading %s" % filename)
+				return False
+			self.image = image
+			self.filename = filename
+			self.canvas.loadPixmap(QPixmap.fromImage(image))
+			if self.labelFile:
+				self.loadLabels(self.labelFile.shapes)
+			self.setClean()
+			self.canvas.setEnabled(True)
+			self.adjustScale(initial=True)
+			self.paintCanvas()
+			self.addRecentFile(self.filename)
+			self.toggleActions(True)
+			self.canvas.filename = self.filename
+			self.setWindowTitle('{}@{}'.format(__appname__, self.filename))
+			self.actions.saveAs.setEnabled(True)
+			self.actions.save.setEnabled(True)
+			## Label xml file and show bound box according to its filename
+			if self.usingPascalVocFormat is True:
+				annotation_dir = self.get_annotation_dir()
+				basename = os.path.basename(os.path.splitext(self.filename)[0])
+				xmlPath = os.path.join(annotation_dir, basename + '.xml')
+				self.loadPascalXMLByFilename(xmlPath)
+			self.canvas.update_active_mode()
+			self.disable_items()
+			self.mode_overlay.update_mode(self.annotation_mode, self.propagation_mode, self.filename)
+			return True
+		return False
+	
+	def resizeEvent(self, event):
+		if self.canvas and not self.image.isNull() \
+			and self.zoomMode != self.MANUAL_ZOOM:
+			self.adjustScale()
+		if (self.canvas.pixmap is not None and
+				    self.canvas.pixmap.height() > 0 and self.canvas.pixmap.width() > 0):
+			self.zoomMode = self.FIT_WINDOW
+			self.adjustScale()
+		super(MainWindow, self).resizeEvent(event)
+	
+	@pyqtSlot()
+	def paintCanvas(self):
+		assert not self.image.isNull(), "cannot paint null image"
+		self.canvas.scale = 0.01 * self.zoomWidget.value()
+		self.canvas.adjustSize()
+		self.canvas.update()
+	
+	def adjustScale(self, initial=False):
+		value = self.scalers[self.FIT_WINDOW if initial else self.zoomMode]()
+		self.zoomWidget.setValue(int(100 * value))
+	
+	def scaleFitWindow(self):
+		"""Figure out the size of the pixmap in order to fit the main widget."""
+		e = 2.0  # So that no scrollbars are generated.
+		w1 = self.centralWidget().width() - e
+		h1 = self.centralWidget().height() - e
+		a1 = w1 / h1
+		# Calculate a new scale value based on the pixmap's aspect ratio.
+		w2 = self.canvas.pixmap.width() - 0.0
+		h2 = self.canvas.pixmap.height() - 0.0
+		a2 = w2 / h2
+		return w1 / w2 if a2 >= a1 else h1 / h2
+	
+	def scaleFitWidth(self):
+		# The epsilon does not seem to work too well here.
+		w = self.centralWidget().width() - 2.0
+		return w / self.canvas.pixmap.width()
+	
+	def closeEvent(self, event):
+		if not self.mayContinue():
+			event.ignore()
+		s = self.settings
+		# If it loads images from dir, don't load it at the begining
+		if self.dirname is None:
+			s['filename'] = self.filename if self.filename else QString()
+		else:
+			s['filename'] = ''
+		s['window/size'] = self.size()
+		s['window/position'] = self.pos()
+		# s['window/state'] = self.saveState()
+		s['line/color'] = self.lineColor
+		s['fill/color'] = self.fillColor
+		s['recentFiles'] = self.recentFiles
+		s['advanced'] = not self._beginner
+		if self.defaultSaveDir is not None and len(self.defaultSaveDir) > 1:
+			s['savedir'] = str(self.defaultSaveDir)
+		else:
+			s['savedir'] = ""
+		if self.lastOpenDir is not None and len(self.lastOpenDir) > 1:
+			s['lastOpenDir'] = str(self.lastOpenDir)
+		else:
+			s['lastOpenDir'] = ""
+		# ask the use for where to save the labels
+		# s['window/geometry'] = self.saveGeometry()
+	
+	## User Dialogs ##
+	def loadRecent(self, filename):
+		if self.mayContinue():
+			self.loadFile(filename)
+	
+	def scanAllImages(self, folderPath):
+		from glob import glob
+		extensions = {'.jpeg', '.jpg', '.png', '.bmp'}
+		images = []
+		# scan all images
+		for ext in extensions:
+			images.extend(glob(os.path.join(folderPath, '*{}'.format(ext))))
+		# scan all annotation files
+		images.extend(self.get_images_from_annotations(folderPath))
+		images.sort(key=lambda x: x.lower())
+		# with open('image_list.txt', 'w') as f:
+		#     f.write('\n'.join(images))
+		return images
+	
+	def get_images_from_annotations(self, path):
+		from glob import glob
+		extensions = {'.xml'}
+		xmls = []
+		for ext in extensions:
+			xmls.extend(glob(os.path.join(path, '*{}'.format(ext))))
+		images = []
+		imfolder = None
+		ask_path = True
+		for xml in xmls:
+			imname = ''
+			while not os.path.exists(imname) and ask_path:
+				imname = self.get_imagepath_from_annotation(xml, imfolder)
+				if not os.path.exists(imname):
+					_path = os.path.join(path, os.pardir)
+					ans = self.show_yes_no_dialog("Image(s) cannot be found. Do you want"
+					                              " to provide the path to the images?")
+					if not ans:
+						ask_path = False
+						break
+					imfolder = unicode(QFileDialog.getExistingDirectory(self,
+					                                                    '%s - Select image folder' % __appname__, _path,
+					                                                    QFileDialog.ShowDirsOnly
+					                                                    | QFileDialog.DontResolveSymlinks))
+			images.append(imname)
+		# remove all files which do not exist
+		images = [i for i in images if os.path.exists(i)]
+		images.sort(key=lambda x: x.lower())
+		return images
+	
+	def get_imagepath_from_annotation(self, xmlname, imfolder=None):
+		fname = os.path.basename(xmlname)
+		if imfolder is None:
+			root = os.path.normpath(os.path.join(os.path.dirname(xmlname), os.pardir))
+			imfolder = '_'.join(fname.split('_')[3:5])
+			# hack for current version
+			imfolder = imfolder[:-1]
+			imfolder = os.path.join(root, imfolder)
+		imname = self.get_imname_from_annotation(xmlname)
+		imname = os.path.join(imfolder, imname)
+		return imname
+	
+	def get_imname_from_annotation(self, xml):
+		from lxml import etree
+		root = etree.parse(xml)
+		imname = root.find('filename').text
+		# todo: remove when old xml is corrected (filename has extension also)
+		if not os.path.splitext(imname)[1]:
+			imname = '{}.png'.format(imname)
+		return imname
+	
+	def openAnnotation(self, _value=False):
+		if self.filename is None:
+			return
+		path = os.path.dirname(unicode(self.filename)) \
+			if self.filename else '.'
+		if self.usingPascalVocFormat:
+			formats = ['*.%s' % unicode(fmt).lower() \
+			           for fmt in QImageReader.supportedImageFormats()]
+			filters = "Open Annotation XML file (%s)" % \
+			          ' '.join(formats + ['*.xml'])
+			filename = unicode(QFileDialog.getOpenFileName(self,
+			                                               '%s - Choose a xml file' % __appname__, path, filters))
+			self.loadPascalXMLByFilename(filename)
+	
+	def openDir(self, _value=False):
+		# if not self.mayContinue():
+		#     return
+		if self.hasLabels():
+			self.saveFile()
+		else:
+			self.remove_exisiting_xml()
+		path = os.path.dirname(unicode(self.filename)) \
+			if self.filename else '.'
+		if self.lastOpenDir is not None and len(self.lastOpenDir) > 1:
+			path = self.lastOpenDir
+		dirpath = unicode(QFileDialog.getExistingDirectory(self,
+		                                                   '%s - Open Directory' % __appname__, path,
+		                                                   QFileDialog.ShowDirsOnly
+		                                                   | QFileDialog.DontResolveSymlinks))
+		if dirpath is None or len(dirpath) <= 0:
+			return
+		self.all_reset()
+		self.mImgList = self.scanAllImages(dirpath)
+		if len(self.mImgList) <= 0:
+			self.status('Error: {} has no images/annotations'.format(dirpath))
+			return
+		self.lastOpenDir = dirpath
+		self.dirname = dirpath
+		self.filename = None
+		self.defaultSaveDir = self.get_annotation_dir(dirpath)
+		self.end_index = len(self.mImgList)
+		self.init_annotation_highlighter()
+		self.init_slider_widget()
+		self.openNextImg()
+		self.show_folder_nav()
+	
+	def get_xmlname_from_image(self, im):
+		root, imname = os.path.split(im)
+		annodir = os.path.join(os.path.split(root)[0],
+		                       'annotations')
+		imname = os.path.splitext(imname)[0]
+		xml = os.path.join(annodir, imname + '.xml')
+		return xml
+	
+	def get_annotation_dict(self):
+		nimages = len(self.mImgList)
+		anno_dict = {}
+		anno_all = [False] * nimages
+		anno_dict['undefined'] = [False] * nimages
+		for idx, im in enumerate(self.mImgList):
+			xml = self.get_xmlname_from_image(im)
+			for lab in self.get_all_lables(xml):
+				try:
+					anno_dict[lab][idx] = True
+					anno_all[idx] = True
+				except KeyError:
+					anno_dict[lab] = [False] * nimages
+					anno_dict[lab][idx] = True
+					anno_all[idx] = True
+		return anno_dict, anno_all
+	
+	def init_annotation_highlighter(self, color_map=None):
+		orange = QColor(255, 150, 0, 255)
+		green = QColor(0, 255, 0, 255)
+		red = QColor(255, 0, 0, 255)
+		black = QColor(0, 0, 0, 255)
+		blue = QColor(0, 0, 255, 255)
+		colors = [
+			# QColor(255, 0, 0, 255),
+			# QColor(0, 255, 0, 255),
+			# QColor(0, 0, 255, 255),
+			# QColor(255, 255, 0, 255),
+			QColor(255, 0, 255, 255),
+			QColor(0, 255, 255, 255),
+			QColor(170, 60, 57, 255),
+			QColor(170, 151, 57, 255),
+			QColor(65, 48, 117, 255),
+			QColor(45, 134, 50, 255),
+			QColor(111, 37, 111, 255),
+			QColor(170, 121, 57, 255),
+			QColor(41, 80, 109, 255),
+			QColor(145, 164, 55, 255),
+			QColor(255, 146, 0, 255),
+			QColor(0, 146, 255, 255),
+			QColor(211, 255, 0, 255),
+			QColor(230, 7, 71, 255),
+			QColor(255, 194, 8, 255),
+			QColor(34, 31, 178, 255),
+			QColor(111, 255, 0, 255),
+			QColor(153, 51, 80, 255),
+		]
+		anno_higlighter = {}
+		anno_dict, anno_all = self.get_annotation_dict()
+		predef_labs = self.labelHist
+		# combine existing with available labels
+		for lab in predef_labs:
+			mode, lab = LabelDialog.parse_class_label(lab)
+			if lab == '' or lab.startswith('#'):
+				continue
+			if not anno_dict.has_key(lab):
+				anno_dict[lab] = [False] * len(self.mImgList)
+		if color_map is None:
+			color_map = {}
+			for idx, lab in enumerate(anno_dict.keys()):
+				color_map[lab] = colors[idx % len(colors)]
+			color_map['signal_unknown'] = blue
+			color_map['annotations'] = black
+			color_map['signal_red_hp0'] = red
+			color_map['signal_green'] = green
+			color_map['signal_orange'] = orange
+		for lab, frames in anno_dict.items():
+			anno_higlighter[lab] = AnnotationHighlighter(frames,
+			                                             color_map[lab],
+			                                             lab)
+		anno_all_higlighter = AnnotationHighlighter(anno_all,
+		                                            black,
+		                                            'annotations')
+		anno_higlighter = collections.OrderedDict(
+			sorted(anno_higlighter.items()))
+		
+		self.all_anno_highlighter = collections.OrderedDict()
+		self.all_anno_highlighter['annotations'] = anno_all_higlighter  # annotations should always be first
+		self.all_anno_highlighter.update(anno_higlighter)
+		return self.all_anno_highlighter
+	
+	def init_slider_widget(self):
+		self.index_slider_widget = IndexSliderWidget(self.index_slider,
+		                                             self.all_anno_highlighter.values(),
+		                                             self.timeline_dialog,
+		                                             self.reset_index)
+		self.index_slider_widget.setRange(1, len(self.mImgList))
+		self.index_slider_widget.show()
+		# self.index_slider_widget.layout().setSizeConstraint(QLayout.SetFixedSize)
+		self.dock_slider.setWidget(self.index_slider_widget)
+		self.index_slider_widget.index_range_changed.connect(self.on_index_range_change)
+	
+	@pyqtSlot(int, int)
+	def on_index_range_change(self, start, end):
+		self.set_start_index(start)
+		self.set_end_index(end)
+	
+	def set_start_index(self, index):
+		self.start_index = index
+		self.start_image_textedit_textchanged()
+	
+	def set_end_index(self, index):
+		self.end_index = index
+		self.end_image_textedit_textchanged()
+	
+	def update_anno_highlighter(self, filename=None):
+		if not self.all_anno_highlighter or not self.mImgList:
+			return
+		if filename is None:
+			filename = self.filename
+		idx = self.mImgList.index(filename)
+		labels = self.get_all_lables()
+		for ah_true in [ah for lab, ah in self.all_anno_highlighter.items() if lab in labels]:
+			ah_true.frame_index[idx] = True
+		for ah_false in [ah for lab, ah in self.all_anno_highlighter.items() if not lab in labels]:
+			ah_false.frame_index[idx] = False
+		self.all_anno_highlighter['annotations'].frame_index[idx] = len(labels) > 0
+		self.index_slider_widget.update()
+	
+	def get_all_lables(self, xml=None):
+		labels = []
+		if xml is None:
+			for shape in self.canvas.shapes:
+				if not shape.label in labels:
+					labels.append(shape.label)
+			return labels
+		if (not os.path.exists(xml)):
+			return []
+		from lxml import etree as et
+		root = et.parse(xml)
+		labels = [obj.find('name').text for obj in root.findall('object')]
+		return labels
+	
+	def show_folder_nav(self):
+		self.dock_slider.show()
+		self.layout_show(self.list_folder_nav)
+	
+	def hide_folder_nav(self):
+		self.dock_slider.hide()
+		self.layout_hide(self.list_folder_nav)
+	
+	def layout_hide(self, layout):
+		self.layout_setVisible(layout, False)
+	
+	def layout_show(self, layout):
+		self.layout_setVisible(layout, True)
+	
+	def layout_setVisible(self, layout, vis):
+		for i in range(0, layout.count()):
+			child = layout.itemAt(i)
+			if child.widget() is not None:
+				child.widget().setVisible(vis)
+			elif child.layout() is not None:
+				self.layout_setVisible(child.layout(), vis)
+	
+	def bounded_open_img_update_index(self, index, propagate=False):
+		start_idx = int(self.startImageTextEdit.text())
+		end_idx = int(self.endImageTextEdit.text())
+		# clip index to start and end
+		index = max(start_idx, index)
+		index = min(end_idx, index)
+		prev_idx = self.cur_index
+		self.cur_index = index
+		fname = None
+		if (self.mImgList is not None and
+				    len(self.mImgList) > 0):
+			try:
+				fname = self.mImgList[self.cur_index - 1]
+			except IndexError:
+				pass
+			if fname is not None:
+				if propagate:
+					if self.par['dense_propagation']:
+						overwritelist = []
+						do_overwrite = False
+						# check if any files will be overwritten
+						for i in range(prev_idx, self.cur_index):
+							savedir = self.get_annotation_dir()
+							if savedir is not None and len(str(savedir)):
+								imgFileName = os.path.basename(self.mImgList[i])
+								savedFileName = os.path.splitext(imgFileName)[0] + LabelFile.suffix
+								savedPath = os.path.join(savedir, savedFileName)
+								if os.path.exists(savedPath):
+									overwritelist.append(savedFileName)
+						# ask for overwriting
+						if len(overwritelist):
+							flist = '\n'.join(overwritelist) if len(overwritelist) < 20 else '\n'.join(
+								overwritelist[:2] + [' ... '] + overwritelist[-2:])
+							dialog = 'Do you want to overwrite files {} ?'.format(flist)
+							do_overwrite = LabelFile.qt_ask_dialog(LabelFile(), dialog)
+						# write the files
+						if not overwritelist or do_overwrite:
+							for i in range(prev_idx, self.cur_index):
+								self.dirty = True
+								self.filename = self.mImgList[i]
+								self.saveFile(ask_for_overwrite=False)
+					else:
+						self.dirty = True
+						self.filename = fname
+						self.saveFile(ask_for_overwrite=True)
+				self.loadFile(fname)
+				return True, self.cur_index
+		return False, self.cur_index
+	
+	def remove_exisiting_xml(self):
+		if self.filename is None:
+			return
+		imgFileName = os.path.basename(self.filename)
+		savedFileName = os.path.splitext(imgFileName)[0] + LabelFile.suffix
+		savedPath = os.path.join(str(self.get_annotation_dir()), savedFileName)
+		try:
+			os.remove(savedPath)
+			print 'remove xml:', savedPath
+			self.status('removed {}'.format(savedPath))
+		except OSError:
+			pass
+		except Exception as e:
+			print("{}".format(e.message))
+	
+	def openPrevImg(self, _value=False):
+		if self.hasLabels():
+			self.saveFile()
+		else:
+			self.remove_exisiting_xml()
+		# if not self.mayContinue():
+		#     return
+		if self.mImgList is None or len(self.mImgList) <= 0:
+			return
+		if self.filename is None:
+			return
+		try:
+			cur_idx = self.cur_index
+			step = int(self.nextImageStepTextEdit.text())
+			new_idx = cur_idx - step
+			self.bounded_open_img_update_index(new_idx)
+		except ValueError:
+			return
+	
+	def openNextImg(self):
+		print 'openNextImg'
+		if self.hasLabels():
+			self.saveFile()
+		else:
+			self.remove_exisiting_xml()
+		# if not self.mayContinue():
+		#     return
+		if self.mImgList is None or len(self.mImgList) <= 0:
+			return
+		try:
+			new_idx = self.cur_index
+			if self.filename is not None:
+				step = self.step_size_index
+				if new_idx == 1 and step > 1:
+					new_idx = step
+				else:
+					new_idx += step
+			self.bounded_open_img_update_index(new_idx, self.propagation_mode)
+		except ValueError:
+			return
+	
+	def openFile(self, _value=False):
+		# if not self.mayContinue():
+		#     return
+		if self.hasLabels():
+			self.saveFile()
+		else:
+			self.remove_exisiting_xml()
+		path = os.path.dirname(unicode(self.filename)) \
+			if self.filename else '.'
+		formats = ['*.%s' % unicode(fmt).lower() \
+		           for fmt in QImageReader.supportedImageFormats()]
+		filters = "Image & Label files (%s)" % \
+		          ' '.join(formats + ['*%s' % LabelFile.suffix])
+		filename = unicode(QFileDialog.getOpenFileName(self,
+		                                               '%s - Choose Image or Label file' % __appname__, path, filters))
+		if filename:
+			self.all_reset()
+			self.hide_folder_nav()
+			self.loadFile(filename)
+	
+	def open_imagelist(self):
+		if self.hasLabels():
+			self.saveFile()
+		else:
+			self.remove_exisiting_xml()
+		path = os.path.dirname(unicode(self.filename)) \
+			if self.filename else '.'
+		formats = ['*.%s' % unicode(fmt).lower() \
+		           for fmt in ['txt']]
+		filters = "Image list files (%s)" % \
+		          ' '.join(formats)
+		filename = unicode(QFileDialog.getOpenFileName(self,
+		                                               '%s - Choose Image list file' % __appname__, path, filters))
+		imagelist = self.parse_image_list(filename) if filename else None
+		if filename:
+			self.all_reset()
+			self.mImgList = imagelist
+			if len(self.mImgList) <= 0:
+				self.status('Error: {} has no images/annotations'.format(filename))
+				return
+			self.init_annotation_highlighter()
+			self.init_slider_widget()
+			self.end_index = len(self.mImgList)
+			self.openNextImg()
+			self.show_folder_nav()
+	
+	def parse_image_list(self, imlist):
+		lines = []
+		with open(imlist) as f:
+			lines = f.readlines()
+			lines = [l.strip() for l in lines]
+			lines = [l for l in lines if l]
+		images = []
+		for l in lines:
+			im = l
+			if os.path.splitext(l)[1] == '.xml':
+				im = self.get_imagepath_from_annotation(l)
+			images.append(im)
+		# remove images which don't exist
+		images = [i for i in images if os.path.exists(i)]
+		return images
+	
+	def get_annotation_dir(self, impath_filename=None, create=True):
+		# expect/create annotation folder in 'annotations' in parent
+		# https://tools.mobility.siemens.com/redmine/projects/spa_ti_h-4383-adas/wiki/Data_capturing_and_data_organization
+		if impath_filename is None:
+			impath_filename = self.filename
+		if self.defaultSaveDir is not None:
+			savedir = str(self.defaultSaveDir)
+		else:
+			if os.path.isfile(impath_filename):
+				fbase = os.path.dirname(impath_filename)
+			else:
+				fbase = impath_filename
+			assert os.path.isdir(fbase)
+			savedir = os.path.join(fbase, os.pardir, 'annotations')
+			savedir = os.path.normpath(savedir)
+		if create and not os.path.exists(savedir):
+			os.makedirs(savedir)
+		return savedir
+	
+	def saveFile(self, _value=False, ask_for_overwrite=False):
+		assert not self.image.isNull(), "cannot save empty image"
+		if self.filename is None:
+			return
+		if not self.dirty:
+			return
+		if self.hasLabels():
+			savedir = self.get_annotation_dir()
+			if savedir is not None and len(str(savedir)):
+				print 'handle the image:' + self.filename
+				imgFileName = os.path.basename(self.filename)
+				savedFileName = os.path.splitext(imgFileName)[0] + LabelFile.suffix
+				savedPath = os.path.join(self.get_annotation_dir(), savedFileName)
+				self._saveFile(savedPath, ask_for_overwrite=ask_for_overwrite)
+			else:
+				self._saveFile(self.filename if self.labelFile \
+					               else self.saveFileDialog(),
+				               ask_for_overwrite=ask_for_overwrite)
+		self.update_anno_highlighter()
+	
+	def saveFileAs(self, _value=False):
+		assert not self.image.isNull(), "cannot save empty image"
+		if self.hasLabels():
+			self._saveFile(self.saveFileDialog())
+	
+	def saveFileDialog(self):
+		caption = '%s - Choose File' % __appname__
+		filters = 'File (*%s)' % LabelFile.suffix
+		openDialogPath = self.currentPath()
+		dlg = QFileDialog(self, caption, openDialogPath, filters)
+		dlg.setDefaultSuffix(LabelFile.suffix[1:])
+		dlg.setAcceptMode(QFileDialog.AcceptSave)
+		dlg.setConfirmOverwrite(True)
+		filenameWithoutExtension = os.path.splitext(self.filename)[0]
+		dlg.selectFile(filenameWithoutExtension)
+		dlg.setOption(QFileDialog.DontUseNativeDialog, False)
+		if dlg.exec_():
+			return dlg.selectedFiles()[0]
+		return ''
+	
+	def _saveFile(self, filename, ask_for_overwrite=False):
+		if filename and self.saveLabels(filename, ask_for_overwrite=ask_for_overwrite):
+			self.addRecentFile(filename)
+			self.setClean()
+			self.statusBar().showMessage('Saved to %s' % filename, 3000)
+			self.statusBar().show()
+	
+	def closeFile(self, _value=False):
+		self.saveFile()
+		self.resetState()
+		self.setClean()
+		self.toggleActions(False)
+		self.canvas.setEnabled(False)
+		self.actions.saveAs.setEnabled(False)
+		self.actions.save.setEnabled(False)
+	
+	# Message Dialogs. #
+	def hasLabels(self):
+		if not self.itemsToShapes:
+			# self.errorMessage(u'No objects labeled',
+			#         u'You must label at least one object to save the file.')
+			return False
+		return True
+	
+	def mayContinue(self):
+		return not (self.dirty and not self.discardChangesDialog())
+	
+	def discardChangesDialog(self):
+		msg = u'You have unsaved changes, proceed anyway?'
+		return self.show_yes_no_dialog(msg)
+	
+	def show_yes_no_dialog(self, msg):
+		yes, no = QMessageBox.Yes, QMessageBox.No
+		ans = yes == QMessageBox.warning(self, u'Attention', msg, yes | no)
+		return ans
+	
+	def errorMessage(self, title, message):
+		return QMessageBox.critical(self, title,
+		                            '<p><b>%s</b></p>%s' % (title, message))
+	
+	def currentPath(self):
+		return os.path.dirname(unicode(self.filename)) if self.filename else '.'
+	
+	def chooseColor1(self):
+		color = self.colorDialog.getColor(self.lineColor, u'Choose line color',
+		                                  default=DEFAULT_LINE_COLOR)
+		if color:
+			self.lineColor = color
+			# Change the color for all shape lines:
+			Shape.line_color = self.lineColor
+			self.canvas.update()
+			self.setDirty()
+	
+	def chooseColor2(self):
+		color = self.colorDialog.getColor(self.fillColor, u'Choose fill color',
+		                                  default=DEFAULT_FILL_COLOR)
+		if color:
+			self.fillColor = color
+			Shape.fill_color = self.fillColor
+			self.canvas.update()
+			self.setDirty()
+	
+	def poly_remove_point_shape(self):
+		shape = self.canvas.selectedShape
+		shape = self.canvas.hShape if shape is None else shape
+		# if shape is not None:
+		index = self.canvas.hVertex
+		if (shape is not None and
+				    len(shape) > 2 and
+				    index is not None and
+				    type(shape) is Poly):
+			if shape.selected or shape.hover:
+				del shape[index]
+				self.setDirty()
+				self.canvas.repaint()
+		else:
+			self.deleteSelectedShape()
+	
+	def deleteSelectedShape(self):
+		if self.canvas.selectedShape is None:
+			return
+		self.remLabel(self.canvas.deleteSelected())
+		self.setDirty()
+		if self.noShapes():
+			for action in self.actions.onShapesPresent:
+				action.setEnabled(False)
+		self.update_anno_highlighter()
+	
+	def chshapeLineColor(self):
+		color = self.colorDialog.getColor(self.lineColor, u'Choose line color',
+		                                  default=DEFAULT_LINE_COLOR)
+		if color:
+			self.canvas.selectedShape.line_color = color
+			self.canvas.update()
+			self.setDirty()
+	
+	def chshapeFillColor(self):
+		color = self.colorDialog.getColor(self.fillColor, u'Choose fill color',
+		                                  default=DEFAULT_FILL_COLOR)
+		if color:
+			self.canvas.selectedShape.fill_color = color
+			self.canvas.update()
+			self.setDirty()
+	
+	def copyShape(self):
+		self.canvas.endMove(copy=True)
+		self.addLabel(self.canvas.selectedShape)
+		self.setDirty()
+	
+	def moveShape(self):
+		self.canvas.endMove(copy=False)
+		self.setDirty()
+	
+	def loadPredefinedClasses(self):
+		predefined_classes_path = os.path.join('data', 'predefined_classes.txt')
+		if os.path.exists(predefined_classes_path) is True:
+			with open(predefined_classes_path) as f:
+				for line in f:
+					line = line.strip()
+					if self.labelHist is None:
+						self.lablHist = [line]
+					else:
+						self.labelHist.append(line)
+	
+	def loadPascalXMLByFilename(self, filename):
+		if self.filename is None:
+			return
+		if os.path.exists(filename) is False:
+			return
+		tVocParseReader = PascalVocReader(filename)
+		shapes = tVocParseReader.getShapes()
+		self.loadLabels(shapes)
+
+
+class Settings(object):
+	"""Convenience dict-like wrapper around QSettings."""
+	
+	def __init__(self, types=None):
+		self.data = QSettings()
+		self.types = defaultdict(lambda: QVariant, types if types else {})
+	
+	def __setitem__(self, key, value):
+		t = self.types[key]
+		self.data.setValue(key,
+		                   t(value) if not isinstance(value, t) else value)
+	
+	def __getitem__(self, key):
+		return self._cast(key, self.data.value(key))
+	
+	def get(self, key, default=None):
+		return self._cast(key, self.data.value(key, default))
+	
+	def _cast(self, key, value):
+		# XXX: Very nasty way of converting types to QVariant methods :P
+		t = self.types[key]
+		if t != QVariant:
+			method = getattr(QVariant, re.sub('^Q', 'to', t.__name__, count=1))
+			return method(value)
+		return value
+
+
+def inverted(color):
+	return QColor(*[255 - v for v in color.getRgb()])
+
+
+def read(filename, default=None):
+	try:
+		with open(filename, 'rb') as f:
+			return f.read()
+	except:
+		return default
+
+
+# assign cfg entries to python variables, useful for typechecking and setting defaults
+def get_dict_from_cfg(cfg):
+	par = {}
+	par['annotation_dir'] = cfgget(cfg, 'General', 'annotation_dir', '')
+	par['dense_propagation'] = cfggetboolean(cfg, 'General', 'dense_propagation', '')
+	return par
+
+
+def main(argv):
+	"""Standard boilerplate Qt application code."""
+	app = QApplication(argv)
+	app.setApplicationName(__appname__)
+	app.setWindowIcon(newIcon("app"))
+	parser = ArgumentParser()
+	parser.add_argument("-c", "--config", type=str, help="Configuration file")
+	args = parser.parse_args()
+	cfg = ConfigParser()
+	if args.config is not None:
+		cfg.readfp(open(args.config))
+	par = get_dict_from_cfg(cfg)
+	win = MainWindow(par)
+	# win = MainWindow(filename)
+	win.show()
+	return app.exec_()
+
+
+if __name__ == '__main__':
+	sys.exit(main(sys.argv))
