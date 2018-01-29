@@ -2512,6 +2512,47 @@ def cp_matched_files(src_im, file_p):
 		cmd = 'mv ' + p_from + m + ' ' + p_to
 		os.system(cmd)
 
+
+
+def save_16_frames_from_video():
+  #load video
+  TEST_VIDEO_LOAD_PATH = '/home/hy/Downloads/'
+  EVA_SAVE_PATH = '/home/hy/Downloads/aggr_v/'
+  V_FILE = 'Train_Fight_0_1min.mp4'
+  print 'TEST_VIDEO_LOAD_PATH + V_FILE: ', TEST_VIDEO_LOAD_PATH + V_FILE
+  vid = cv2.VideoCapture(TEST_VIDEO_LOAD_PATH + V_FILE)
+  count, clip = 0, []
+  
+  while True:
+    ret, frame = vid.read()
+    if ret:
+      
+      #count frames
+      count += 1
+      #frame = cv2.resize(frame, (171, 128))
+      frame = frame[8:120,30:142]
+      print 'frame shape', frame.shape #112,112,3
+      #cv2.imshow('tmp', frame)
+      #cv2.waitKey()
+      #X = vid[start_frame:(start_frame + clip_len), :, :, :]
+      #print 'frame shape:', frame.shape  #(360, 202, 3)
+      #frame = np.array(frame)
+      #X = frame[:, 8:120, 30:142, :]  # (l, h, w, c)
+      clip.append(frame)
+      
+      if count % 16 == 0 and count > 28: # and count < 16*10 + 288:
+        for im,i in zip(clip,xrange(16)):
+          #save
+          #print 'count',count
+          v_str = EVA_SAVE_PATH + V_FILE[:-4] + str(count+1)
+          cv2.imshow('tmp',im)
+          cv2.waitKey(60)
+          #cv2.imwrite(v_str)
+      clip = []
+    else:
+      print 'check file path, break'
+      break
+      
 # Todo create config file
 # Todo Add flags for different distortions
 # Todo Remove some transforms before show
