@@ -1,3 +1,39 @@
+#create test/train folder list
+SUB_FOLDER=-1
+LABEL_0=0
+LABEL_1=1
+LABEL_2=2
+LABEL_3=3
+USE_ORI_SCRIPT=0
+LIST_TYPE='test_clipfolder'
+folder='/home/hy/Documents/aggr/Own_Data/images'
+#./create_train_list.sh /home/hy/Documents/aggr/Own_Data/images  #no / at the end
+> $LIST_TYPE.list
+
+if [[ $USE_ORI_SCRIPT == "0" ]]; then
+  #for folder in $1/*
+  for folder in $folder/*
+  do
+    echo $folder
+    for imagesFolder in "$folder"/*
+    do
+      if [[ $folder == *"0"* ]];then
+ echo "$imagesFolder" $LABEL_0 >> $LIST_TYPE.list
+      fi
+      if [[ $folder == *"1"* ]];then
+        echo "$imagesFolder" $LABEL_1 >> $LIST_TYPE.list
+      fi
+      if [[ $folder == *"2"* ]];then
+        echo "$imagesFolder" $LABEL_2 >> $LIST_TYPE.list
+      fi
+     
+    done
+  done
+fi
+
+
+
+
 #!/bin/bash
 # 
 # convert the video to images, can convert avi or mp4
