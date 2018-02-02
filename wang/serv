@@ -1,0 +1,79 @@
+#import flask, jsonify
+import os
+import threading
+from flask import Flask, jsonify, make_response, request
+#from main_service import controller
+#import controller
+import datacenter_methods
+app = Flask(__name__)
+dir_name = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.join(dir_name, "config/controller_config.json")
+#con = controller.Controller(config_path)
+con = datacenter_methods.Controller(config_path)
+
+update_interval = 5
+
+def update_thread(f_stop):
+    """ Keeps DB up to date """
+    con.sync_db()
+    if not f_stop.is_set():
+        threading.Timer(update_interval, update_thread, [f_stop]).start()
+
+f_stop = threading.Event()
+update_thread(f_stop)
+
+
+@app.route('/ping', methods=['GET'])
+def ping_training_nodes():
+    nodes = con.ping_sub_services()
+    datacenter = con.ping_data_center()
+    return jsonify({"responses": {"nodes":nodes, "datacenter":datacenter}})
+
+@app.route('/list_data', methods=['GET'])
+def list_data():
+    return jsonify(con.list_available_data())
+    
+@app.route('/info', methods=['GET'])
+def test():
+    return jsonify({"status":"I am ok ..!"})
+
+@app.route('/')
+def root():
+  return app.send_static_file('index.html')
+
+@app.route('/list_f', methods=['GET'])
+def list_folder(abs_path='/media/sf_VM_share/training_datacenter/image'):
+  dict = []
+  # check if path is a dir and serve
+  if os.path.isdir(abs_path):
+    folders = [s for s in os.listdir(abs_path) if '.' not in s]
+    for folder in folders:
+      res = {}
+      res["data id"] = folder
+      res["desc"] = 'data_class_2'
+      dict.append(res)
+      print dict[0]
+
+  return jsonify({"folder":dict[0]})
+
+@app.route('/<path:path>')
+def static_proxy(path):
+  # send_static_file will guess the correct MIME type
+  return app.send_static_file(path)
+
+'''
+@app.route('/infofolder', methods=['GET'])
+#@app.route('/listing', methods=['GET'])
+def collectfolder():
+    #res = con.dir_listing()
+    #return jsonify({"dataset id": "asdasdas"})
+    #return jsonify({"list":res})
+    
+    return jsonify({"status":"folders are ok"})
+'''
+
+
+if __name__ == "__main__":
+    print 'con.port:', con.port
+    app.run(debug=False, host="0.0.0.0", port=con.port)
+
