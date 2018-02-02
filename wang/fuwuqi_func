@@ -78,8 +78,8 @@ class Controller(object):
 
     def list_available_data(self):
         # TODO: Return exception when data center is not reachable
-        print 'data_center_url:',self.data_center_url
-        print requests.get(self.data_center_url + "/index.json").content
+        print 'mdbshared:',self.mdbshared
+        #print requests.get(self.data_center_url + "/index.json").content
         #try:
         #return json.load(requests.get(self.data_center_url + "/index.json").content)
         #except:
@@ -88,28 +88,29 @@ class Controller(object):
         return "OK"
 
     
-    def dir_listing(self):
+    def list_f(self):
         # Joining the base and the requested path
 
         #abs_path = os.path.join("", self.data_center_url)
-	abs_path = self.data_center_url
+	abs_path = self.mdbshared
         print 'abs path:', abs_path
         # Return 404 if path doesn't exist
         if not os.path.exists(abs_path):
             print 'abs path not exists'
             return abort(404)
         dict = []
+        description = ['typeI','typeII']
         # check if path is a dir and serve
         if os.path.isdir(abs_path):
           folders = [s for s in os.listdir(abs_path) if '.' not in s]
-          for folder in folders:
+          for folder,desc in zip(folders,description):
               res = {}
               res["data id"] = folder
-              res["desc"] = 'data_class_2'
+              res["desc"] = desc
               dict.append(res)
-        print dict[0]
+        
         return dict
-        #return json.load(dict)
+        
        
     def ping_data_center(self):
         res = {}
