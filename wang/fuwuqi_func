@@ -1,0 +1,117 @@
+#datamethods.py
+import json
+import os
+import random
+#from main_service import db
+import db
+import requests
+import subprocess
+from flask import render_template
+from flask import abort,send_file
+STATUS_LOST = "Lost"
+
+def create_url_from_ip(ip, port):
+    return "http://" + ip + ":" + port
+
+class Controller(object):
+    def __init__(self, config):
+        self.read_config(config)
+        self.db_manager = db.DataBaseManager(self.db)
+
+    def read_config(self, config):
+        if not os.path.exists(config):
+            raise IOError("Config file does not exist")
+        with open(config, "r") as f:
+            self.config = json.load(f)
+        try:
+            self.db = self.config["local_db"]
+            self.port = self.config["port"]
+            self.data_center_url = create_url_from_ip(self.config["data_center_ip"], self.config["data_center_port"])
+            self.mdbshared = self.config["modeldb_shared"]
+        except ValueError as e:
+            raise e
+    def update_sub_service_status(self):
+        nodes = self.db_manager.get_all_nodes()
+        for n in nodes:
+            try:
+                req = requests.get(n.address + "/status")
+                status = json.loads(req.content)["status"]
+                self.db_manager.update_node_status(n.id, status)
+            except Exception:
+                self.db_manager.update_node_status(n.id, STATUS_LOST)
+        self.data_center_status = self.ping_data_center()[self.data_center_url]
+    def update_experiment_status(self):
+        exp = self.db_manager.get_ongoing_experiments()
+        for e in exp:
+            if not self.db_manager.get_node_from_id(e.node_id).status == "Idle":
+                continue
+            data = self.get_experiment_status(e.id)
+            if 'error' in data:
+                self.db_manager.set_experiment_status(e.id, "Unknown")
+            else:
+                try:
+                    data = data["status"]
+                    train_status = data["train_status"]
+                    train_job_id = data["train_job_id"]
+                    url = data["url"]
+                    self.db_manager.set_experiment_status(e.id, train_status)
+                    self.db_manager.set_experiment_train_job_id(e.id, train_job_id)
+                    self.db_manager.set_experiment_train_url(e.id, url)
+                    self.db_manager.set_experiment_results(e.id, data)
+                except Exception as err:
+                    print "update_experiment_status error: ", err
+                    pass
+    def sync_db(self):
+        self.update_sub_service_status()
+        self.update_experiment_status()
+    def is_sub_service_alive(self, service_address):
+        try:
+            requests.get(service_address)
+            return True;
+        except Exception:
+            return False;
+
+    def ping_data_center(self):
+        res = {}
+        res[self.data_center_url] = self.is_sub_service_alive(self.data_center_url)
+        return res
+
+    def list_available_data(self):
+        # TODO: Return exception when data center is not reachable
+        print 'data_center_url:',self.data_center_url
+        print requests.get(self.data_center_url + "/index.json").content
+        #try:
+        #return json.load(requests.get(self.data_center_url + "/index.json").content)
+        #except:
+        #raise
+        #return json.loads(requests.get(self.data_center_url + "/index.json").content)
+        return "OK"
+
+    
+    def dir_listing(self):
+        # Joining the base and the requested path
+
+        #abs_path = os.path.join("", self.data_center_url)
+	abs_path = self.data_center_url
+        print 'abs path:', abs_path
+        # Return 404 if path doesn't exist
+        if not os.path.exists(abs_path):
+            print 'abs path not exists'
+            return abort(404)
+        dict = []
+        # check if path is a dir and serve
+        if os.path.isdir(abs_path):
+          folders = [s for s in os.listdir(abs_path) if '.' not in s]
+          for folder in folders:
+              res = {}
+              res["data id"] = folder
+              res["desc"] = 'data_class_2'
+              dict.append(res)
+        print dict[0]
+        return dict
+        #return json.load(dict)
+       
+    def ping_data_center(self):
+        res = {}
+        res[self.data_center_url] = self.is_sub_service_alive(self.data_center_url)
+        return res
