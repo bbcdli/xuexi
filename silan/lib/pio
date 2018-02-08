@@ -1,0 +1,189 @@
+#pascal_voc_io.py
+import os
+import sys
+from xml.etree import ElementTree
+from xml.etree.ElementTree import Element, SubElement
+from xml.dom import minidom
+from lxml import etree
+import numpy as np
+
+def round_int(x):
+    return int(round(x))
+BOX_XML = 'box'
+POLY_XML = 'poly'
+class PascalVocWriter:
+    def __init__(self, foldername, filename, imgSize, databaseSrc='Unknown', localImgPath=None):
+        self.foldername = foldername
+        self.filename = filename
+        self.databaseSrc = databaseSrc
+        self.imgSize = imgSize
+        self.boxlist = []
+        self.polylinelist = []
+        self.localImgPath = localImgPath
+    def prettify(self, elem):
+        """
+            Return a pretty-printed XML string for the Element.
+        """
+        rough_string = ElementTree.tostring(elem,'utf8')
+        reparsed = minidom.parseString(rough_string)
+        return reparsed.toprettyxml(indent="\t")
+    def genXML(self):
+        """
+            Return XML root
+        """
+        # Check conditions
+        if self.filename is None or \
+                self.foldername is None or \
+                self.imgSize is None or \
+                (len(self.polylinelist) <= 0 and len(self.boxlist) <= 0):
+                    return None
+        top = Element('annotation')
+        folder = SubElement(top, 'folder')
+        folder.text = os.path.dirname(self.foldername)
+        filename = SubElement(top, 'filename')
+        filename.text = os.path.basename(self.localImgPath)
+        localImgPath = SubElement(top, 'path')
+        localImgPath.text = self.localImgPath
+        source = SubElement(top, 'source')
+        database = SubElement(source, 'database')
+        database.text = self.databaseSrc
+        size_part = SubElement(top, 'size')
+        width = SubElement(size_part, 'width')
+        height = SubElement(size_part, 'height')
+        depth = SubElement(size_part, 'depth')
+        width.text = str(self.imgSize[1])
+        height.text = str(self.imgSize[0])
+        if len(self.imgSize) == 3:
+            depth.text = str(self.imgSize[2])
+        else:
+            depth.text = '1'
+        segmented = SubElement(top, 'segmented')
+        segmented.text = '0'
+        return top
+    def addBndBox(self, xmin, ymin, xmax, ymax, name, ignore, difficult):
+        if __debug__:
+            outimg = min(xmin, ymin) < 0
+            outimg = outimg or xmax > self.imgSize[1]
+            outimg = outimg or ymax > self.imgSize[0]
+            if outimg:
+                from warnings import warn
+                warn('Bounding box is out of image: {} xmin, {} ymin, {} xmax, {} ymax'.format(xmin, ymin, xmax, ymax))
+        bndbox = {'xmin':xmin, 'ymin':ymin, 'xmax':xmax, 'ymax':ymax}
+        bndbox['name'] = name
+        bndbox['ignore'] = ignore
+        bndbox['difficult'] = difficult
+        self.boxlist.append(bndbox)
+    def addPolyLine(self, points, name, ignore, difficult):
+        polygon = dict(points=points,
+                        name=name,
+                       ignore=ignore,
+                       difficult=difficult
+                       )
+        if __debug__:
+            # sanity check for points
+            # don't do this in optimization mode
+            xx = [p[0] for p in points]
+            yy = [p[1] for p in points]
+            xmax = np.max(xx)
+            xmin = np.min(xx)
+            ymax = np.max(yy)
+            ymin = np.min(xx)
+            outimg = min(xmin, ymin) < 0
+            outimg = outimg or xmax > self.imgSize[1]
+            outimg = outimg or ymax > self.imgSize[0]
+            if outimg:
+                from warnings import warn
+                warn('Polygon is out of image: {}'.format(points))
+        self.polylinelist.append(polygon)
+    def appendObjects_poly(self, top, offset=None):
+        print top
+        if offset is None:
+            offset = 0
+        for id, each_object in enumerate(self.polylinelist):
+            object_item = SubElement(top, 'object')
+            SubElement(object_item, 'name').text = str(each_object['name'])
+            SubElement(object_item, 'pose').text = 'Unspecified'
+            SubElement(object_item, 'truncated').text = '0'
+            SubElement(object_item, 'difficult').text = str(each_object['difficult'])
+            SubElement(object_item, 'ignore').text = '1' if each_object['ignore'] else '0'
+            SubElement(object_item, 'id').text = str(id+offset)
+            # should be similar to: http://labelme.csail.mit.edu/Release3.0/Annotations/static_outdoor_street_berkeley/IMG_1447.xml
+            polygon = SubElement(object_item, 'polygon')
+            for p in each_object['points']:
+                x, y = p
+                pt = SubElement(polygon, 'pt')
+                SubElement(pt, 'x').text = str(round_int(x))
+                SubElement(pt, 'y').text = str(round_int(y))
+    def appendObjects(self, top, offset=None):
+        for id, each_object in enumerate(self.boxlist):
+            object_item = SubElement(top,'object')
+            name = SubElement(object_item, 'name')
+            name.text = str(each_object['name'])
+            pose = SubElement(object_item, 'pose')
+            pose.text = "Unspecified"
+            truncated = SubElement(object_item, 'truncated')
+            truncated.text = "0"
+            difficult = SubElement(object_item, 'difficult')
+            difficult.text = str(each_object['difficult'])
+            SubElement(object_item, 'ignore').text = '1' if each_object['ignore'] else '0'
+            SubElement(object_item, 'id').text = str(id+offset)
+            bndbox = SubElement(object_item, 'bndbox')
+            xmin = SubElement(bndbox, 'xmin')
+            xmin.text = str(each_object['xmin'])
+            ymin = SubElement(bndbox, 'ymin')
+            ymin.text = str(each_object['ymin'])
+            xmax = SubElement(bndbox, 'xmax')
+            xmax.text = str(each_object['xmax'])
+            ymax = SubElement(bndbox, 'ymax')
+            ymax.text = str(each_object['ymax'])
+    def save(self, targetFile = None):
+        root = self.genXML()
+        self.appendObjects(root, offset=0)
+        self.appendObjects_poly(root, offset=len(self.boxlist))
+        out_file = None
+        if targetFile is None:
+            filename = os.path.join(self.foldername, self.filename)
+            print filename
+            out_file = open(filename + '.xml','w')
+        else:
+            out_file = open(targetFile, 'w')
+        out_file.write(self.prettify(root))
+        out_file.close()
+class PascalVocReader:
+    def __init__(self, filepath):
+        ## shapes type:
+        ## [labbel, [(x1,y1), (x2,y2), (x3,y3), (x4,y4)], color, color]
+        self.shapes=[]
+        self.filepath = filepath
+        self.parseXML()
+    def getShapes(self):
+        return self.shapes
+    def add_box(self, label, xmin, xmax, ymin, ymax, ignore, difficult):
+        points = [(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)]
+        self.shapes.append((BOX_XML, label, points, None, None, ignore, difficult))
+    def add_poly(self, label, points, ignore, difficult):
+        self.shapes.append((POLY_XML, label, points, None, None, ignore, difficult))
+    def parseXML(self):
+        assert self.filepath.endswith('.xml'), "Unsupported file format"
+        xmltree = ElementTree.parse(self.filepath).getroot()
+        filename = xmltree.find('filename').text
+        for object_iter in xmltree.findall('object'):
+            label = object_iter.find('name').text
+            try:
+                ignore = object_iter.find('ignore').text == '1'
+            except AttributeError:
+                ignore = False
+            difficult = int(object_iter.find('difficult').text)
+            bndbox = object_iter.find('bndbox')
+            if bndbox is not None:
+                xmin = int(bndbox.find('xmin').text)
+                xmax = int(bndbox.find('xmax').text)
+                ymin = int(bndbox.find('ymin').text)
+                ymax = int(bndbox.find('ymax').text)
+                self.add_box(label, xmin, xmax, ymin, ymax, ignore, difficult)
+            else:
+                poly = object_iter.find('polygon')
+                points = [(int(it.find('x').text), int(it.find('y').text)) for it in poly]
+                self.add_poly(label, points, ignore, difficult)
+        return True
+
