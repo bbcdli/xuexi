@@ -1,0 +1,11 @@
+#data/predefined_classes.txt
+# Traffic light signal labels
+box:signal_unknown
+box:signal_red_hp0
+box:signal_green
+box:signal_orange
+# Track labels
+poly:object
+poly:person
+
+
