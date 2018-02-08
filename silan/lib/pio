@@ -187,3 +187,13 @@ class PascalVocReader:
                 self.add_poly(label, points, ignore, difficult)
         return True
 
+# tempParseReader = PascalVocReader('test.xml')
+# print tempParseReader.getShapes()
+"""
+# Test
+tmp = PascalVocWriter('temp','test', (10,20,3))
+tmp.addBndBox(10,10,20,30,'chair')
+tmp.addBndBox(1,1,600,600,'car')
+tmp.save()
+"""
+
