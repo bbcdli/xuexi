@@ -1,0 +1,63 @@
+#timelinelegend.py
+from PyQt4.QtGui import *
+from PyQt4.QtCore import *
+__version__ = '0.0.1'
+
+class TimelineLegendDialog(QDialog):
+    values_changed = pyqtSignal(str, bool)
+    def __init__(self, anno_list ,*args, **kwargs):
+        super(TimelineLegendDialog, self).__init__(*args, **kwargs)
+        lw = QListWidget(self)
+        self.add_annotation_list(anno_list, lw)
+        lw.itemChanged.connect(self.on_item_changed)
+        mainlayout = QVBoxLayout()
+        title = QLabel('Timeline legend')
+        title.setAlignment(Qt.AlignCenter)
+        mainlayout.addWidget(title)
+        mainlayout.addWidget(lw)
+        buttonlayout = QHBoxLayout()
+        buttonlayout.addStretch()
+        okbutton = QPushButton('&Ok', self)
+        okbutton.clicked.connect(self.close)
+        buttonlayout.addWidget(okbutton)
+        mainlayout.addLayout(buttonlayout)
+        self.setLayout(mainlayout)
+    def add_annotation_list(self, anno_list, listwidget):
+        for name, enabled, color, num in anno_list:
+            check_flag = Qt.Checked if enabled else Qt.Unchecked
+            item = QListWidgetItem('{} ({})'.format(name, num))
+            if name == 'annotations':
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
+            item.setTextColor(color)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(check_flag)
+            listwidget.addItem(item)
+    @pyqtSlot(QListWidgetItem)
+    def on_item_changed(self, item):
+        name = str(item.text())
+        name = name.split()[0]
+        state = bool(item.checkState())
+        self.values_changed.emit(name, state)
+
+if __name__ == '__main__':
+    import sys
+    app = QApplication(sys.argv)
+    anno_list = [
+        ('foo', True),
+        ('bar', False),
+        ('bar', False),
+        ('bar', False),
+        ('bar', False),
+        ('bar', True),
+        ('bar', False),
+        ('bar', False),
+        ('bar', True),
+        ('test', True)
+    ]
+    tdiag = TimelineLegendDialog(anno_list)
+    tdiag.show()
+    sys.exit(app.exec_())
+
+
