@@ -1,0 +1,138 @@
+#helpdialog.py
+from PyQt4.QtGui import *
+from PyQt4.QtCore import *
+from lib import newIcon, labelValidator
+
+__author__ = ''
+__version__ = '0.0.1'
+
+BB = QDialogButtonBox
+
+HELP_SECTION_NAVIGATION = 'navigation'
+HELP_SECTION_EDIT = 'edit'
+HELP_SECTION_GENERAL = 'general'
+HELP_SECTION_VIEW = 'view'
+class HelpDialog(QDialog):
+    def __init__(self, shortcuts, parent=None):
+        super(HelpDialog, self).__init__(parent)
+        self.setMinimumSize(600, 80)
+        self.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        # self.setWindowModality(Qt.NonModal)
+        self.setModal(False)
+        mainlayout = QVBoxLayout()
+        columnlayout = QHBoxLayout()
+        leftlayout = QVBoxLayout()
+        rightlayout = QVBoxLayout()
+        section_temp = "<P><b><FONT SIZE = 3>{}</b></P></br><hr>"
+        shortcut_title = QLabel()
+        shortcut_title.setText(section_temp.format('Keyboard Shortcuts'))
+        shortcut_title.setAlignment(Qt.AlignCenter)
+        mainlayout.addWidget(shortcut_title)
+        nav_label = QLabel()
+        nav_label.setText(section_temp.format('Navigation'))
+        nav_label.setAlignment(Qt.AlignLeft)
+        leftlayout.addWidget(nav_label)
+        self.add_shortcuts(leftlayout, shortcuts, HELP_SECTION_NAVIGATION)
+
+        view_label = QLabel()
+        view_label.setText(section_temp.format('View'))
+        view_label.setAlignment(Qt.AlignLeft)
+        rightlayout.addWidget(view_label)
+        self.add_shortcuts(rightlayout, shortcuts, HELP_SECTION_VIEW)
+        edit_label = QLabel()
+        edit_label.setText(section_temp.format('Edit'))
+        edit_label.setAlignment(Qt.AlignLeft)
+        leftlayout.addWidget(edit_label)
+        self.add_shortcuts(leftlayout, shortcuts, HELP_SECTION_EDIT)
+        general_label = QLabel()
+        general_label.setText(section_temp.format('General'))
+        general_label.setAlignment(Qt.AlignLeft)
+        rightlayout.addWidget(general_label)
+        self.add_shortcuts(rightlayout, shortcuts, HELP_SECTION_GENERAL)
+        rightlayout.addStretch(1)
+        leftlayout.addStretch(1)
+        columnlayout.addLayout(leftlayout)
+        columnlayout.addLayout(rightlayout)
+        mainlayout.addLayout(columnlayout)
+
+        self.buttonBox = bb = BB(BB.Ok, Qt.Horizontal, self)
+        bb.button(BB.Ok).setIcon(newIcon('done'))
+        bb.accepted.connect(self.accept)
+
+        mainlayout.addWidget(bb)
+        self.setLayout(mainlayout)
+    def add_shortcuts(self, layout, shortcuts_dict, section):
+        width = 20
+        try:
+            for key, text, icon in shortcuts_dict[section]:
+                hboxlayout = QHBoxLayout()
+                key_lab = QLabel()
+                try:
+                    key_lab.setText(key)
+                except TypeError:
+                    key_lab.setText('')
+                key_lab.setFixedWidth(80)
+                key_lab.setAlignment(Qt.AlignLeft)
+                key_lab.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+                text_lab = QLabel()
+                text_lab.setText(text)
+                text_lab.setAlignment(Qt.AlignLeft)
+                if icon is not None:
+                    icon_lab = QLabel()
+                    icon_lab.setPixmap(icon)
+                    icon_lab.setScaledContents(True)
+                    isize = icon.size()
+                    if isize.width() > 0:
+                        isize *= width / float(isize.width())
+                    else:
+                        isize.setHeight(width)
+                        isize.setWidth(width)
+                    icon_lab.setFixedSize(isize)
+                    hboxlayout.addWidget(icon_lab)
+                hboxlayout.addWidget(key_lab)
+                hboxlayout.addWidget(text_lab)
+                layout.addLayout(hboxlayout)
+            # add empty space to next section
+            hboxlayout = QHBoxLayout()
+            text_lab = QLabel()
+            text_lab.setText('')
+            text_lab.setAlignment(Qt.AlignLeft)
+            hboxlayout.addWidget(text_lab)
+            layout.addLayout(hboxlayout)
+        except KeyError:
+            pass
+    def popUp(self, ):
+        self.show()
+        # self.exec_()
+    def keyPressEvent(self, ev):
+        key = ev.key()
+        print key
+        if key == Qt.Key_H:
+            self.hide()
+
+if __name__ == '__main__':
+    import sys
+    app = QApplication(sys.argv)
+    shortcuts = {}
+    shortcuts[HELP_SECTION_NAVIGATION] = {}
+    shortcuts[HELP_SECTION_NAVIGATION]['a'] = 'prev image'
+    shortcuts[HELP_SECTION_NAVIGATION]['d'] = 'next image'
+    shortcuts[HELP_SECTION_NAVIGATION]['w'] = 'increase step size'
+    shortcuts[HELP_SECTION_NAVIGATION]['s'] = 'decrease step size'
+    shortcuts[HELP_SECTION_EDIT] = {}
+    shortcuts[HELP_SECTION_EDIT]['ctrl+q'] = 'Quit application'
+    shortcuts[HELP_SECTION_EDIT]['ctrl+o'] = 'Open image'
+
+    shortcuts[HELP_SECTION_VIEW] = {}
+    shortcuts[HELP_SECTION_VIEW]['a'] = 'prev image'
+    shortcuts[HELP_SECTION_VIEW]['d'] = 'next image'
+    shortcuts[HELP_SECTION_VIEW]['w'] = 'increase step size'
+    shortcuts[HELP_SECTION_VIEW]['s'] = 'decrease step size'
+    shortcuts[HELP_SECTION_GENERAL] = {}
+    shortcuts[HELP_SECTION_GENERAL]['a'] = 'prev image'
+    shortcuts[HELP_SECTION_GENERAL]['d'] = 'next image'
+    shortcuts[HELP_SECTION_GENERAL]['w'] = 'increase step size'
+    shortcuts[HELP_SECTION_GENERAL]['s'] = 'decrease step size'
+    HelpDialog(shortcuts).popUp()
+    sys.exit(app.exec_())
+
