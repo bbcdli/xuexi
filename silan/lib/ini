@@ -1,5 +1,5 @@
 #folder libs
 #__init__.py
-__author__ = 'Christoph Hoffmann z003hr1r'
+
 __version__ = '0.0.1'
 
