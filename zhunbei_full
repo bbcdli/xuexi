@@ -102,6 +102,7 @@ get_PCA_ = 0
 do_convertPCA_ = 0
 convertPCA_ = 0
 cropImage_none_overlap_ = 0
+get_mask_from_xml_ = 0  #new
 ######### org data
 split_Data = 0
 ############################################
@@ -125,6 +126,7 @@ if SWITCH_data_augmentation == 0:
 	get_PCA_ = 0
 	convertPCA_ = 0
 	cropImage_none_overlap_ = 0
+	get_mask_from_xml_ = 0
 if SWITCH_organize_data == 0:
 	REMOVE_Inputpatches = 0
 	REMOVE_Inputpatches_outside = 0
@@ -2553,6 +2555,68 @@ def save_16_frames_from_video():
       print 'check file path, break'
       break
       
+
+
+
+PROJ_DIR = '/home/hy/Documents/1_images_from_Christoph_folder_out1/silanno_tmp/'
+import xml.etree.ElementTree as eTree
+def get_seg_mask(obj_list,bg_base_np,fn):
+    for obj,idx in zip(obj_list,xrange(len(obj_list))):
+        seg_list = obj.find("polygon")
+        current_poly = []
+        #working on collection of points for one polygon
+        for pt in seg_list.findall('pt'):
+            x0 = pt.find('x')
+            y0 = pt.find('y')
+            x = int(x0.text)
+            y = int(y0.text)
+            current_poly.append((x,y))
+        pts = np.array([[x, y] for (x, y) in current_poly])
+        cv2.drawContours(bg_base_np, [pts], -1, (255, 255, 255, 255), -1)
+        # cv2.polylines(canvas,[pt],isClosed=True,color=(255,255,255),thickness=2)#for ring
+        #cv2.imshow('can', bg_base_np);
+        #cv2.waitKey()
+    print '\n####fn:', fn
+    #print PROJ_DIR + 'Data/training/2_m/m_xml_'+str(idx)+'.png'
+    #bg_base_np.save(PROJ_DIR + 'Data/training/2_m/m_xml_'+str(idx)+'.png')
+    #cv2.imwrite(PROJ_DIR + 'Data/training/2_m/m_xml_'+str(idx)+'.png',bg_base_np)
+    cv2.imwrite(PROJ_DIR + 'res/' + fn + '.png',bg_base_np)
+
+def get_obj_list(xml_file):
+    tree = eTree.parse(xml_file)
+    root = tree.getroot()
+    coordinates = []
+    obj_list = root.findall("object")
+    print 'len objects',len(obj_list)
+    return obj_list
+
+
+def get_mask_from_xml():
+    from xml.dom import minidom
+    img_size = (800, 600)
+    #Documents/1_images_from_Christoph_folder_out1/silanno_tmp
+    #p = PROJ_DIR + 'Data/xml/'
+    p = PROJ_DIR + '1_im_small_fg/'
+    dirs_xml = sorted([s for s in os.listdir(p) if 'xml' in s])
+    print 'dirs_xml:', len(dirs_xml)
+    #dirs_xml = dirs_xml[:9]
+    dirs_im = sorted([s for s in os.listdir(p) if 'png' in s])
+    xml_fnames = []
+    for dir in dirs_xml:
+        fn,end = os.path.splitext(dir)
+
+        obj_list = get_obj_list(p+dir)
+        print '\nobj list:',len(obj_list)
+        bg_base = Image.new('RGB',(800,600),(0,0,0))
+        bg_base_np = np.asarray(bg_base, np.uint8)
+        h,w = 600,800
+        get_seg_mask(obj_list,bg_base_np,fn)
+
+if get_mask_from_xml_ = 1:
+   get_mask_from_xml()
+
+
+
 # Todo create config file
 # Todo Add flags for different distortions
 # Todo Remove some transforms before show
