@@ -2558,7 +2558,7 @@ def save_16_frames_from_video():
 
 
 
-PROJ_DIR = '/home/hy/Documents/1_images_from_Christoph_folder_out1/silanno_tmp/'
+PROJ_DIR = '/home/p/'
 import xml.etree.ElementTree as eTree
 def get_seg_mask(obj_list,bg_base_np,fn):
     for obj,idx in zip(obj_list,xrange(len(obj_list))):
