@@ -1,0 +1,328 @@
+import tensorflow as tf
+import cv2
+import numpy as np
+from keras.backend import set_image_dim_ordering
+from keras.models import load_model
+import keras
+from PIL import ImageDraw
+from PIL import ImageFilter
+from PIL import ImageOps
+import time
+from functools import wraps
+from random import randint
+import os,sys,time
+import datetime
+import settings  # hy: collection of global variables
+import tools
+from sklearn import datasets
+import math
+import imutils
+from PIL import Image  # hy: create video with images
+# from keras.models import Model
+# from keras.callbacks import ModelCheckpoint, LearningRateScheduler
+import re
+
+PROJ_DIR = '/home/hy/Documents/'
+FLAGS = tf.flags.FLAGS
+tf.flags.DEFINE_integer("IMAGE_SIZE", "160", "input image size")
+tf.flags.DEFINE_string('seg_model_search_p', PROJ_DIR + 'testbench/1/1/', "path to log file")
+tf.flags.DEFINE_string('save_res_path', PROJ_DIR + 'testbench/k_imgs/', "path to save res images")
+tf.flags.DEFINE_bool('with_gt', "True", "test with ground truth: True/ False")  #
+tf.flags.DEFINE_bool('CLOSE_ALL', "False", "print Info level 0 on: True/ False")
+tf.flags.DEFINE_bool('INFO_0', "False", "print Info level 0 on: True/ False")
+tf.flags.DEFINE_bool('DEBUG', "False", "print Info level 0 on: True/ False")
+Seg_MODEL_to_load = '092_12-0.05_2' + '.hdf5'
+# seg_model_search_p = os.path.join(PROJ_DIR,'testbench/1/1/')
+start_time = time.time()
+do_classification = True
+result_for_table = False
+use_pretrained_cl_model = False
+thresh_res = 50  #
+search_str = 'cmp'
+in_ch = 1
+border = 0
+
+
+def get_model_index(path, search_by):
+  import re
+  m = os.path.basename(path)
+  found_index = re.search(search_by, m)
+  f_wo_ext = os.path.splitext(path)[0]
+  if found_index:
+    index = found_index.start() + 1
+    f_wo_ext = os.path.basename(f_wo_ext)[index:]
+  else:
+    f_wo_ext = os.path.basename(f_wo_ext)
+  return f_wo_ext
+
+
+def ROI(pred_thresh, im_crop, w, h, im_i=0, save_file=False):
+  """
+  Finalize prediced ROI
+  :param pred_thresh: image region to analyze -
+  :param im_crop: RGB input
+  :param w,h: width and height to be resized to
+  :param im_i: serial ID of the input image
+  :param save_file: switch for saving file
+  Available options:
+  save_file = True/ False
+  """
+  # input
+  fr = im_crop.copy()
+  im_crop_rz = cv2.resize(im_crop, (h, w))
+  blackbg = np.zeros((w, h, 3), np.uint8)
+  whitebg = np.zeros((w, h, 3), np.uint8)
+  whitebg.fill(255)
+  new_mask = np.zeros((w, h, 3), np.uint8)
+
+  ###############
+  def find_contour(obj_area, thresh):
+    gray = cv2.resize(np.uint8(obj_area), (h, w))  # direct
+    ret, gray = cv2.threshold(gray, thresh, 255, 0)
+    contours, hierarchy = cv2.findContours(gray, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)  # 1
+    if len(contours) > 0:
+      screen_out = True
+    else:
+      screen_out = False
+    return contours, screen_out
+
+  #########################################################
+  contours, screen_out = find_contour(pred_thresh, thresh_res)  # 160/255 = 0.62
+  if screen_out:
+    # debug
+    # time for contour 0.000312089920044
+    fr_add_cont = cv2.resize(np.uint8(fr), (h, w))  # 0,1
+    fr_ori_int8 = fr_add_cont.copy()  # 0,1
+    # initialize
+    roi_res = im_crop_rz.copy()
+    new_roi_res = im_crop_rz.copy()
+    old_roi_res = im_crop_rz.copy()
+    ######################################
+    largest_areas = sorted(contours, key=cv2.contourArea)  # 1
+    for i in xrange(len(largest_areas)):
+      cv2.drawContours(fr_add_cont, [largest_areas[-i]], 0, (255, 255, 255, 255), -1)
+      cv2.drawContours(blackbg, [largest_areas[-i]], 0, (255, 255, 255, 255), -1)
+    new_mask = blackbg
+    x, y, bw, bh = 0, 0, 0, 0
+    r1, r2, c1, c2 = y, y + bh, x, x + bw
+
+  else:
+    print 'no contour found (1)'
+    screen_out = False
+    old_roi_res = np.zeros((w, h, 3), np.uint8)
+    old_roi_res.fill(255)
+    new_roi_res = old_roi_res.copy()  # no roi
+    new_mask = np.zeros((w, h, 3), np.uint8)  # full black mask
+    fr_add_cont = im_crop_rz.copy()
+    x, y, bw, bh = 0, 0, 0, 0
+    r1, r2, c1, c2 = y, y + bh, x, x + bw
+  # time for contour,add mask 0.00493407249451
+  #####################################################################
+  old_mask = blackbg
+  return fr_add_cont, old_mask, old_roi_res, new_mask, new_roi_res, r1, r2, c1, c2, screen_out, whitebg
+
+
+def do_segment_video(model, im_crop_color, im_i, h, w, in_ch, show_bbox=False):
+  res_pass_list, res_fail_list = [], []
+  ####### convert into the shape for seg model input
+  if FLAGS.INFO_0:
+    print w, h  # 160,160
+  im_crop = cv2.resize(cv2.cvtColor(im_crop_color, cv2.COLOR_BGR2GRAY), (h, w))
+  im_crop = np.float32(im_crop.reshape(h, w))
+  im_crop = im_crop / 255.0
+  im_crop = tools.reduce_mean_stdev(im_crop, print_val=False)
+  image_tensor = np.zeros((3, 1, h, w))
+  image_tensor[1, :, :, :] = im_crop
+  if FLAGS.INFO_0:
+    print 'image_tensor.shape1:', image_tensor.shape
+  image_tensor = image_tensor[1:-1, :, :, :]  # hy: convert to (1, 1, 320, 320) to fit bg model input shape
+  # debug
+  # print '2-shape of test images', images.shape  # (1, 1, 320, 320)
+  ######################
+  images_original = image_tensor.copy()
+  # image_tensor = np.transpose(image_tensor,(0,2,1,3))
+  # print 'image_tensor.shape2:', image_tensor.shape
+  for i in range(0, image_tensor.shape[0]):
+    start = time.time()
+    pred = model.predict(image_tensor[i, :, :, :].reshape(1, in_ch, h, w), batch_size=1)  # video
+    end = time.time()
+    if FLAGS.INFO_0:
+      print 'time elapsed for calc seg feature', (end - start), 's'  # 1.24031400681 s
+      print 'Test image', im_i, ", Min,Max: %f %f" % (np.min(pred), np.max(pred))
+    pred_int = pred[0, 0, :, :].reshape((h, w))  #
+    pred_255 = pred_int * 255  #
+    if FLAGS.INFO_0:
+      print '# show segment result for frame', im_i
+  #############################################################################
+  # tmp_time0=time.time() #time for a loop 5.88762402534,5.81136989594 start from here
+  # do_segmentVIDEO
+  fr_add_cont, old_mask, old_roi_res, new_mask, pre_tensor, \
+  r1, r2, c1, c2, screen_out, roi_whitebg = ROI(pred_255, im_crop_color, h, w, im_i=im_i, save_file=False)
+
+  # time for ROI 5.74937677383
+  # tmp_time0 = time.time() #time for a loop 0.0359718799591 start from here
+  # print 'time for write',tmp_time2-tmp_time1 # 0.00110197067261, 7.58029007912(no write), 7.33648395538(use write)
+  return pred_int, pred_255, fr_add_cont, old_mask, old_roi_res, new_mask, pre_tensor, r1, r2, c1, c2, screen_out, roi_whitebg
+
+
+def demo_stacked_n_col_images(prefix, fn, list_of_imgs, winname, save_im=False):  # 2
+  width = len(list_of_imgs)
+  max_r, c_comb, dim_im = 0, 0, 2
+  for im in list_of_imgs:
+    if len(im.shape) == 3:
+      r_im, c_im, dim_im = im.shape
+    else:
+      r_im, c_im = im.shape
+    c_comb += c_im
+    if r_im > max_r:
+      max_r = r_im
+  r_comb = max_r
+  frame_border = 1
+  c_comb = c_comb + (width - 1) * frame_border
+  comb_im = np.zeros(shape=(r_comb, c_comb, dim_im), dtype=np.uint8)
+  white = np.zeros(shape=(r_comb, frame_border, dim_im), dtype=np.uint8)
+  white2 = np.zeros(shape=(r_comb, frame_border), dtype=np.uint8)
+  white.fill(255)
+  white2.fill(255)
+  current_column = 0
+  for im in list_of_imgs:
+    if len(im.shape) == 3:
+      comb_im[:(im.shape[0]), current_column:current_column + im.shape[1]] = im
+      if current_column + im.shape[1] < c_comb:
+        comb_im[:(im.shape[0]),
+        current_column + im.shape[1]:current_column + im.shape[1] + frame_border] = white
+    else:
+      comb_im[:(im.shape[0]), current_column:current_column + im.shape[1]] = im[:, :, None]
+      if current_column + im.shape[1] < c_comb:
+        comb_im[:(im.shape[0]),
+        current_column + im.shape[1]:current_column + im.shape[1] + frame_border] = white2[:, :, None]
+    current_column = current_column + im.shape[1] + frame_border
+  if not FLAGS.CLOSE_ALL:
+    cv2.imshow(winname, comb_im)
+    cv2.waitKey(5)
+  if save_im:
+    cv2.imwrite(prefix + 'comb_' + fn + '.png', comb_im)
+  print 'comb im shape:', comb_im.shape
+  return comb_im
+
+
+def EVALUATE_VIDEO_seg_and_classify(bg_model, VIDEO_FILE, num_class, in_ch, step_show=False, save_imgs=False,
+                                    stop=False):  # (v)
+  bg_model = FLAGS.seg_model_search_p + bg_model
+  video = cv2.VideoCapture(VIDEO_FILE)  # hy: changed from cv2.VideoCapture()
+  video.set(1, 2)  # hy: changed from 1,2000 which was for wheelchair test video,
+  # hy: propID=1 means 0-based index of the frame to be decoded/captured next
+  if not video.isOpened():
+    print "cannot find or open video file"
+    exit(-1)
+  eva_count, video_frame_i = 0, 0
+  confMat1_TEST = np.zeros((num_class, num_class), dtype=np.float)  # hy collect detailed confusion matrix
+  confMat2_TEST = np.zeros((2, 2), dtype=np.float)
+  while True and not stop:  # and video_frame_i < 850:
+    ret, frame = video.read()
+    if cv2.waitKey(1) & 0xFF == ord('q'):  # hy:press key-q to quit
+      print 'key interrupt,press q again to quit completely'
+      break
+    if ret:  # time for a loop 7.28790903091 start from here
+      h, w = frame.shape[0], frame.shape[1]
+      video_frame_i += 1
+      # print '\n\n########################################### start, frame', video_frame_i
+      # print 'frame shape h,w:', h, w  # 1536 2304
+      if video_frame_i % 10 == 0:
+        eva_count += 1
+        # time for a loop 7.43529987335,7.09782910347 variously
+        crop_x1 = 0
+        crop_y1 = 0
+        crop_x2 = 0 + w  # 2300  #1920
+        crop_y2 = 0 + h  # 1536  #1080
+        frame_crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+        frame_crop_color = frame_crop.copy()
+        # debug
+        # time for a loop 7.08207583427 from here
+        # print 'crop size', frame_crop.shape
+        ################################################################################################################
+        # load seg model
+        set_image_dim_ordering(dim_ordering='th')  #
+        model = load_model(bg_model)
+
+        pred_int, pred_255, fr_add_cont, old_mask, old_roi_res, new_mask, \
+        pre_tensor, r1, r2, c1, c2, screen_out, roi_whitebg \
+          = do_segment_video(model, frame_crop_color, video_frame_i, FLAGS.IMAGE_SIZE, FLAGS.IMAGE_SIZE,
+                             in_ch, show_bbox=True)
+        if screen_out:
+          # screen_out = False
+          prefix = FLAGS.save_res_path + get_model_index(Seg_MODEL_to_load, search_by='-')
+          fn = ''
+          # VIDEO
+          s_size = (320 / 2, 320 / 2)
+          list_of_imgs = [cv2.resize(frame_crop_color, s_size), cv2.resize(pred_int, s_size),
+                          cv2.resize(old_mask, s_size), cv2.resize(new_mask, s_size),
+                          cv2.resize(fr_add_cont, s_size),
+                          cv2.resize(roi_whitebg, s_size), cv2.resize(pre_tensor, s_size)]
+          winname = 'in-pred-oldmask-newmask'
+          stacked_imgs = demo_stacked_n_col_images(prefix, fn, list_of_imgs, winname, save_im=False)
+          #cv2.imwrite(prefix + 'comb_' + fn + '.png', stacked_imgs)
+        ################################################################################################################
+        if not step_show:
+          pass
+        else:
+          k = cv2.waitKey(30) & 0xFF
+          while True and not stop:
+            if k == ord('n'):
+              print 'add to fail_list'
+              # res_fail_list.append(read_path_im + os.path.basename(files_im[i]))
+              # res_fail_list.append(files[i])
+              break
+            elif k == ord('y'):
+              print 'add to pass_list'
+              save_ori_frame = True
+              save_imgs = True
+              if save_imgs:
+                if save_ori_frame:
+                  # im_save = cv2.resize(frame_crop_color, (1920, 1080), interpolation=cv2.INTER_CUBIC)  # upsampling
+                  im_save = frame_crop_color  # upsampling
+                # or save image_crop_roi
+                else:
+                  im_save = cv2.resize(frame_crop_color, (h, w))
+                #v_str = '2017-09-06_13.57.41.0.cam_55_3.event43'
+                v_str = os.path.splitext(VIDEO_FILE)[0]
+                cv2.imwrite(FLAGS.save_res_path + v_str + '_' + str(video_frame_i) + '.jpg',
+                            im_save)
+                print 'saved to', FLAGS.save_res_path + v_str + '_' + str(video_frame_i) + '.jpg'
+              break
+            elif k == ord('q'):  # ESC
+              break
+            else:
+              k = cv2.waitKey(30) & 0xFF
+              if k != 255:
+                print 'k:', k  # 81-l, 83-r, 82-u, 84-d
+          if cv2.waitKey(1) & 0xFF == ord('q'):
+            print 'key interrupt, press again to close all windows'
+            break
+        cv2.waitKey(10)  # required for roi_seg
+        # tmp_time3=time.time()
+        # print 'time for a loop',tmp_time3-tmp_time0 #7.11944699287
+    else:
+      print 'video end'
+      stop = True
+  stop = True
+  return stop
+
+
+def main(_):
+  TEST_VIDEO_FULL = True
+  step_show = False
+  if TEST_VIDEO_FULL:
+    print '####################################'
+    print 'Starting evaluation with k model'
+
+    print Seg_MODEL_to_load
+    VIDEO_FILE = '/media/sf_shared/vids/2017-09-06_08.09.58.9.cam_55_4.event12.mp4'
+    stop = False
+    while not stop:
+      stop = EVALUATE_VIDEO_seg_and_classify(Seg_MODEL_to_load, VIDEO_FILE, num_class=2, in_ch=1, step_show=step_show,
+                                             save_imgs=True, stop=False)
+
+
+if __name__ == '__main__':
+  tf.app.run()
