@@ -875,12 +875,413 @@ fi
 
 #########################################
 #II
-###
+#k de xun lian
+from keras.models import model_from_json
+import keras
+from keras.models import Sequential
+from keras.layers.core import Dense, Dropout, Flatten
+from keras.layers.convolutional import Convolution3D, Conv3D, MaxPooling3D, ZeroPadding3D
+from keras.callbacks import ModelCheckpoint, LearningRateScheduler
+from keras.optimizers import Adam, SGD
+import keras.backend as K
+from keras.optimizers import SGD
+import c3d_keras_model as c3d_model
+import numpy as np
+import os, sys, time, random
+import cv2
+from PIL import Image
+
+PROJ_DIR = os.path.dirname(os.path.abspath(__file__))
+train_mode = 'new_train'
+
+
+def rot90(W):
+  for i in range(W.shape[0]):
+    for j in range(W.shape[1]):
+      for k in range(W.shape[2]):
+        W[i, j, k] = np.rot90(W[i, j, k], 2)
+  return W
+
+
+# collect images of given path for one clip
+def get_frames_data_read_clipline(lkdir, num_frames_per_clip=16):
+  ''' Given a directory containing extracted frames, return a video clip of
+  (num_frames_per_clip) consecutive frames as a list of np arrays '''
+  ret_arr = []
+  s_index = 0
+  # print 'lkdir', lkdir
+  im_dirs = sorted([s for s in os.listdir(lkdir)])
+  s_index = random.randint(0, len(im_dirs) - num_frames_per_clip)
+  if len(im_dirs) < num_frames_per_clip:
+    return [], s_index
+  for i, im in zip(range(s_index, s_index + num_frames_per_clip), im_dirs):
+    image_name = lkdir + '/' + im
+    # print 'image:', image_name
+    img = Image.open(image_name)
+    img_data = np.array(img)
+    ret_arr.append(img_data)
+  return ret_arr, s_index
+
+
+def reduce_mean_stdev(images, print_val=False):
+  mean = np.mean(images)
+  stdev = np.std(images)
+  if print_val:
+    print 'mean %d,stdev %d', (mean, stdev)
+  images = images - mean
+  images_reduced_mean = images / stdev
+  return images_reduced_mean
+
+
+def dense_to_one_hot(labels_dense, num_classes=0):
+  """Convert class labels from scalars to one-hot vectors."""
+  num_labels = labels_dense.shape[0]  # num_labels is the same as num of images
+  index_offset = np.arange(num_labels) * num_classes
+  labels_one_hot = np.zeros((num_labels, num_classes))
+  # each label is written as one vector:eg. class 0 of total 6 classes is [1,0,0,0,0,0]
+  labels_one_hot.flat[index_offset + labels_dense.ravel()] = 1
+  return labels_one_hot
+
+
+def read_clip_and_label_v2(filename, read_size, start_pos=-1, num_frames_per_clip=16, crop_size=112,
+                           shuffle=False):
+  lines = open(filename, 'r')
+  read_dirnames = []
+  data = []
+  label = []
+  batch_index = 0
+  next_batch_start = -1
+  lines = list(lines)
+  # print 'len lines', len(lines)
+  # np_mean = np.load('crop_mean.npy').reshape([num_frames_per_clip, crop_size, crop_size, 3])
+  # Forcing shuffle, if start_pos is not specified
+  if start_pos < 0:
+    shuffle = True
+  if shuffle:
+    video_indices = range(len(lines))
+    random.seed(time.time())
+    random.shuffle(video_indices)
+  else:
+    # Process videos sequentially
+    video_indices = range(start_pos, len(lines))
+  for index in video_indices:
+    if (batch_index >= read_size):
+      next_batch_start = index
+      # print 'batch pos > batch_size', batch_index
+      break
+    # split line by ' '
+    line = lines[index].strip('\n').split()
+    dir = line[0]
+    tmp_label = line[1]
+    if not shuffle:
+      # print("Loading a video clip from {}...".format(dir))
+      pass  # hy
+
+    tmp_data, _ = get_frames_data_read_clipline(dir, num_frames_per_clip)
+    # print 'got frames data, len data', len(tmp_data)
+    img_datas = []
+    if (len(tmp_data) != 0):
+      for j in xrange(len(tmp_data)):
+        img = Image.fromarray(tmp_data[j].astype(np.uint8))
+        if (img.width > img.height):
+          scale = float(crop_size) / float(img.height)
+          img = np.array(cv2.resize(np.array(img), (112, 112))).astype(np.float32)
+        else:
+          scale = float(crop_size) / float(img.width)
+          img = np.array(cv2.resize(np.array(img), (112, 112))).astype(np.float32)
+          # img = np.array(cv2.resize(np.array(img), (crop_size, int(img.height * scale + 1)))).astype(np.float32)
+        crop_x = int((img.shape[0] - crop_size) / 2)
+        crop_y = int((img.shape[1] - crop_size) / 2)
+        np_mean = reduce_mean_stdev(img)
+        img = img[crop_x:crop_x + crop_size, crop_y:crop_y + crop_size, :] - np_mean
+        img_datas.append(img)
+      data.append(img_datas)
+      # tmp_label_list = list(int(tmp_label))
+      np_arr_data = np.array(data).astype(np.float32)
+      label.append(int(tmp_label))
+      batch_index = batch_index + 1
+      read_dirnames.append(dir)
+  # pad (duplicate) data/label if less than batch_size
+  valid_len = len(data)
+  pad_len = read_size - valid_len
+  if pad_len:
+    for i in range(pad_len):
+      data.append(img_datas)
+      # convert to onehot
+      label.append(int(tmp_label))
+      np_arr_label = np.array(label).astype(np.int64)
+      np_arr_label_onehot = dense_to_one_hot(np_arr_label, c3d_model.NUM_CLASSES)
+  # np_arr_data = np.array(data).astype(np.float32)
+  # np_arr_label = np.array(label).astype(np.int64)
+  # convert to onehot
+  # print 'len of label:',len(label),label
+  np_arr_label = np.array(label).astype(np.int64)
+  np_arr_label_onehot = dense_to_one_hot(np_arr_label, c3d_model.NUM_CLASSES)
+  # print 'label_onehot:',np_arr_label_onehot
+
+  # print 'next' ,next_batch_start
+  return np_arr_data, np_arr_label_onehot, next_batch_start, read_dirnames, valid_len
+
+
+def train(MAX_ITERATION, learning_rate, model_path, log_LABEL, batch_size, momentum):
+  # if 'con' in train_mode:
+  dim_ordering = K.image_dim_ordering()
+  print "[Info] image_dim_order (from default ~/.keras/keras.json)={}".format(
+    dim_ordering)
+  backend = dim_ordering
+  import caffe_pb2 as caffe
+  import numpy as np
+  p = caffe.NetParameter()
+  p.ParseFromString(
+    open('models/conv3d_deepnetA_sport1m_iter_1900000', 'rb').read()
+  )
+
+  '''
+  model_dir = './models'
+  model_json_filename = os.path.join(model_dir, 'sports1M_weights_tf.json')
+  model = model_from_json(open(model_json_filename, 'r').read())
+  '''
+
+  '''
+  params = []
+  conv_layers_indx = [1, 4, 7, 9, 12, 14, 17, 19]
+  fc_layers_indx = [22, 25, 28]
+  for i in conv_layers_indx:
+      layer = p.layers[i]
+      weights_b = np.array(layer.blobs[1].data, dtype=np.float32)
+      weights_p = np.array(layer.blobs[0].data, dtype=np.float32).reshape(
+          layer.blobs[0].num, layer.blobs[0].channels, layer.blobs[0].length,
+          layer.blobs[0].height, layer.blobs[0].width
+      )
+      weights_p = rot90(weights_p)
+      params.append([weights_p, weights_b])
+  for i in fc_layers_indx:
+      layer = p.layers[i]
+      weights_b = np.array(layer.blobs[1].data, dtype=np.float32)
+      weights_p = np.array(layer.blobs[0].data, dtype=np.float32).reshape(
+          layer.blobs[0].num, layer.blobs[0].channels, layer.blobs[0].length,
+          layer.blobs[0].height, layer.blobs[0].width)[0,0,0,:,:].T
+      params.append([weights_p, weights_b])
+
+  model_layers_indx = [0, 2, 4, 5, 7, 8, 10, 11] + [15, 17, 19] #conv + fc
+  for i, j in zip(model_layers_indx, range(11)):
+      model.layers[i].set_weights(params[j])
+  '''
+  CROP_SIZE, NUM_FRAMES_PER_CLIP = 112, 16
+  keras.callbacks.History()
+  epochs = MAX_ITERATION  #
+  # decay_rate = learning_rate / epochs #not so good
+  read_size = 56
+  train_images, train_labels, next_tr, _, _ = read_clip_and_label_v2(
+    filename=os.path.join(PROJ_DIR, 'lists/train_clipfolder.list'),
+    read_size=read_size * 1,
+    num_frames_per_clip=NUM_FRAMES_PER_CLIP,
+    crop_size=CROP_SIZE,
+    shuffle=True
+  )
+
+  images_t, labels_t, next_tr, _, _ = read_clip_and_label_v2(
+    filename=os.path.join(PROJ_DIR, 'lists/test_clipfolder.list'),
+    read_size=read_size * 1,
+    num_frames_per_clip=NUM_FRAMES_PER_CLIP,
+    crop_size=CROP_SIZE,
+    shuffle=True
+  )
+  model = c3d_model.get_model(summary=True, backend=backend)
+  model_dir = os.path.join(PROJ_DIR, 'log_models/')
+  model_weight_filename = os.path.join(model_dir, 'k_06-13.50.hdf5')
+  model.load_weights(model_weight_filename)
+  sgd = SGD(lr=learning_rate, momentum=momentum)  #
+  model.compile(loss='categorical_crossentropy', optimizer=sgd)
+  save_params = ModelCheckpoint(filepath=model_path + log_LABEL + '_{epoch:02d}-{val_loss:.2f}.hdf5',
+                                monitor='val_loss', verbose=2,
+                                save_best_only=False, save_weights_only=False, mode='auto')
+  model.fit(train_images, train_labels, batch_size=batch_size, epochs=epochs, verbose=1, shuffle=True,
+            validation_data=(images_t, labels_t), callbacks=[save_params])
+  '''
+  model.fit(train_images, train_labels, batch_size=batch_size, nb_epoch=epochs, verbose=1, shuffle=True,
+                    validation_data=(images_t, masks_t), callbacks=[save_params])
+  '''
+  model.save_weights('sports1M_weights_custom.h5', overwrite=True)
+  json_string = model.to_json()
+  with open('sports1M_model.json', 'w') as f:
+    f.write(json_string)
+
+
+def main():
+  MAX_ITERATION = 3
+  learning_rate = 0.0000003  # 0.000003
+  model_path = os.path.join(PROJ_DIR, 'log_models/')
+  log_LABEL = 'k'
+  batch_size = 1
+  momentum = 0.99
+  train(MAX_ITERATION, learning_rate, model_path, log_LABEL, batch_size, momentum)
+
+
+if __name__ == '__main__':
+  main()
+
+
+#####################################################################################################
+
+
+# wang
+from keras.models import Model
+from keras.layers import convolutional, Input, merge, Convolution2D, Conv2D, MaxPooling2D, UpSampling2D, Dropout
+from keras.optimizers import Adam, SGD
+from keras import backend as K
+
+# from keras.utils.visualize_util import plot
+# hy12Aug2017 Successfully installed keras-2.0.6 numpy-1.13.1 scipy-0.19.1 theano-0.9.0
+# uninstalled after occuring error
+# Successfully installed Keras-1.2.2  , (still have numpy-1.13.1 scipy-0.19.1 theano-0.9.0 on)
+
+smooth = 1.
+ordering = 'th'
+concat_axis = 3
+
+
+# https://github.com/orobix/retina-unet/blob/master/src/retinaNN_training.py
+# def get_model(h,w):
+def segnet_arch_2c(dropouts, h, w):
+  print("Model of size: %d %d" % (h, w))
+  ch = 1
+  ordering = 'th'  # 'th': (ch, h, w),  'tf': (h, w, ch)
+  inputs = Input(shape=(ch, h, w))
+  concat_axis = 1
+
+  #              0       1      2      3    4     5      6     7      8
+  # dropouts = [0.37, 0.51, 0.34, 0.48, 1, 0.48, 0.28, 0.78, 0.8]
+  # dropouts = [0.152, 0.25, 0.4, 0.5, 1, 0.4, 0.25, 0.15, 0.15]
+
+  conv1 = Convolution2D(8, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    inputs)
+  conv2 = Convolution2D(8, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    conv1)
+  pool1 = MaxPooling2D(pool_size=(2, 2), dim_ordering=ordering)(conv2)
+  pool1 = Dropout(dropouts[0])(pool1)
+  print 'pool1', pool1.get_shape()
+
+  conv3 = Convolution2D(16, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    pool1)
+  conv4 = Convolution2D(16, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    conv3)
+  pool2 = MaxPooling2D(pool_size=(2, 2), dim_ordering=ordering)(conv4)
+  pool2 = Dropout(dropouts[1])(pool2)
+  print 'pool2', pool2.get_shape()
+
+  conv5 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    pool2)
+  conv6 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    conv5)
+  pool3 = MaxPooling2D(pool_size=(2, 2), dim_ordering=ordering)(conv6)
+  pool3 = Dropout(dropouts[2])(pool3)
+  print 'pool3', pool3.get_shape()
+
+  conv7 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    pool3)
+  conv8 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    conv7)
+  print 'conv8', conv8.get_shape()
+  pool4 = MaxPooling2D(pool_size=(2, 2), dim_ordering=ordering)(conv8)
+  pool4 = Dropout(dropouts[3])(pool4)
+  print 'pool4', pool4.get_shape()
+
+  conv9 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    pool4)
+  conv10 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    conv9)
+  # pool5 = MaxPooling2D(pool_size=(2, 2), dim_ordering=ordering)(conv10)  # 5x5
+  # pool5 = Dropout(dropouts[4])(pool5)
+  print 'conv10', conv10.get_shape()
+
+  up1 = UpSampling2D(size=(2, 2), dim_ordering=ordering)(conv10)
+  print 'up1 upsampling2D:', up1.get_shape()
+  up1 = merge([up1, conv8], mode='concat', concat_axis=concat_axis)
+  # up1 = merge([(UpSampling2D(size=(2, 2),dim_ordering=ordering)(conv5)), pool4], mode='concat', concat_axis=1)
+  up1 = Dropout(dropouts[5])(up1)
+  print 'up1', up1.get_shape()
+  conv11 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    up1)
+  conv12 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    conv11)
+  print 'conv12', conv12.get_shape()
+
+  up2 = UpSampling2D(size=(2, 2), dim_ordering=ordering)(conv12)
+  print 'up2 upsampling2D:', up2.get_shape()
+  up2 = merge([up2, conv6], mode='concat', concat_axis=concat_axis)
+  # up2 = merge([UpSampling2D(size=(2, 2))(conv8), conv3], mode='concat', concat_axis=1)
+  up2 = Dropout(dropouts[6])(up2)
+  print 'up2', up2.get_shape()
+  conv13 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    up2)
+  conv14 = Convolution2D(32, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    conv13)
+  print 'conv13', conv13.get_shape()  # 7,80,32
+  print 'conv2', conv4.get_shape()  # 1,160,16
+
+  up3 = UpSampling2D(size=(2, 2), dim_ordering=ordering)(conv14)  # 14, 160, 32
+  print 'up3 upsampling2D:', up3.get_shape()
+  up3 = merge([up3, conv4], mode='concat', concat_axis=concat_axis)
+  # up3 = merge([UpSampling2D(size=(2, 2))(conv9), conv2], mode='concat', concat_axis=1)
+  up3 = Dropout(dropouts[7])(up3)
+  print 'up3', up3.get_shape()
+  conv15 = Convolution2D(16, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    up3)
+  conv16 = Convolution2D(16, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    conv15)
+  print 'conv16', conv16.get_shape()
+
+  up4 = UpSampling2D(size=(2, 2), dim_ordering=ordering)(conv16)
+  print 'up4 upsampling2D:', up4.get_shape()
+  up4 = merge([up4, conv2], mode='concat', concat_axis=concat_axis)
+  # up4 = merge([UpSampling2D(size=(2, 2))(conv10), conv1], mode='concat', concat_axis=1)
+  up4 = Dropout(dropouts[8])(up4)
+  conv17 = Convolution2D(8, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(up4)
+  conv18 = Convolution2D(8, 3, 3, activation='relu', border_mode='same', init='he_normal', dim_ordering=ordering)(
+    conv17)
+  print 'conv18 shape:', conv18.get_shape()
+  # predictions = Convolution2D(ch, 1, 1, activation='sigmoid', init='he_normal',dim_ordering=ordering)(conv18) #old
+  predictions = Convolution2D(ch, 1, 1, activation='sigmoid', init='he_normal', dim_ordering=ordering)(conv18)  # old
+
+  '''
+  dense1 = Flatten()(conv19)
+  print 'dense1 shape',dense1.get_shape()
+  dense1 = Dropout(1)(dense1)
+
+  predictions = Dense(input_dim=ch*1*1,output_dim =h*w,init = 'he_normal',activation = 'softmax')(dense1)
+  print 'precision get shape',predictions.get_shape()
+  '''
+  model = Model(input=inputs, output=predictions)
+  model.summary()
+  # plot(model, "model.png")
+  return model
+
+
+import keras.backend as kb
+
+
+def dice_coef(y_true, y_pred):
+  y_true_f = kb.flatten(y_true)
+  y_pred_f = kb.flatten(y_pred)
+  intersection = kb.sum(y_true_f * y_pred_f)
+  return (2. * intersection + smooth) / (kb.sum(y_true_f) + kb.sum(y_pred_f) + smooth)
+
+
+def dice_coef_loss(y_true, y_pred):
+  return -dice_coef(y_true, y_pred)
+
+
+
+
+
+### yong caffe can shu zhi
 requirement
 
 h5py==2.6.0
 keras==2.0.0
 numpy==1.12.0
+
 #########################################
 #using pretrained caffe model, only test
 #!/usr/bin/env python
