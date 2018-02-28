@@ -145,7 +145,7 @@ def read_clip_and_label_v2(filename, read_size, start_pos=-1, num_frames_per_cli
   return np_arr_data, np_arr_label_onehot, next_batch_start, read_dirnames, valid_len
 
 
-def train(MAX_ITERATION, learning_rate, model_path, log_LABEL, batch_size, momentum):
+def train(MAX_ITERATION, learning_rate, model_path, model_name,log_LABEL, batch_size, momentum,num_of_clips_pro_class):
   # if 'con' in train_mode:
   dim_ordering = K.image_dim_ordering()
   print "[Info] image_dim_order (from default ~/.keras/keras.json)={}".format(
@@ -187,9 +187,9 @@ def train(MAX_ITERATION, learning_rate, model_path, log_LABEL, batch_size, momen
   keras.callbacks.History()
   epochs = MAX_ITERATION  #
   # decay_rate = learning_rate / epochs #not so good
-  read_size = 56# 56 num of total clips if read images
   read_from_im_folder = False
   if read_from_im_folder:
+    read_size = 56# 56 num of total clips if read images
     train_images, train_labels, next_tr, _, _ = read_clip_and_label_v2(
       filename=os.path.join(PROJ_DIR, 'lists/train_clipfolder.list'),
       read_size=read_size * 1,
@@ -207,19 +207,20 @@ def train(MAX_ITERATION, learning_rate, model_path, log_LABEL, batch_size, momen
     )
   else:
     import collect_im_from_v as cimv
-    train_images, train_labels = cimv.collect_train_data(num_of_clips_pro_class=35)
-    images_t, labels_t = cimv.collect_test_data(num_of_clips_pro_class=2)
+    train_images, train_labels = cimv.collect_train_data(num_of_clips_pro_class)
+    images_t, labels_t = cimv.collect_test_data(num_of_clips_pro_class=8)
 
   model = c3d_model.get_model_3l(summary=True, backend=backend)
   model_dir = os.path.join(PROJ_DIR, 'log_models/')
   if not os.path.exists(model_dir):
     os.makedirs(model_dir)
   if 'con' in train_mode:
-    model_weight_filename = os.path.join(model_dir, 'k_06-13.50.hdf5')
+    model_weight_filename = os.path.join(model_dir, model_name)
     if os.path.exists(model_weight_filename):
       model.load_weights(model_weight_filename)
+      print 'continued training, following',model_name
     else:
-      pass
+      print 'model not found, start a new training'
   sgd = SGD(lr=learning_rate, momentum=momentum)  #
   model.compile(loss='categorical_crossentropy', optimizer=sgd)
   save_params = ModelCheckpoint(filepath=model_path + log_LABEL + '_{epoch:02d}-{val_loss:.2f}.hdf5',
@@ -238,9 +239,9 @@ def train(MAX_ITERATION, learning_rate, model_path, log_LABEL, batch_size, momen
 
 
 def main():
-  MAX_ITERATION = 3
-  learning_rate = 0.0000001 #0.0000003  # 0.000003
-  
+  MAX_ITERATION = 10
+  learning_rate = 0.0003145#0.000000000015 #0.0000003  # 0.000003
+  model_name = 'k_03-0.73.hdf5'
   model_path = os.path.join(PROJ_DIR, 'log_models/')
   if not os.path.exists(model_path):  
     os.makedirs(model_path)
@@ -248,11 +249,9 @@ def main():
   log_LABEL = 'k'
   batch_size = 1
   momentum = 0.99
-  train(MAX_ITERATION, learning_rate, model_path, log_LABEL, batch_size, momentum)
-
+  num_of_clips_pro_class = 60 #even number
+  train(MAX_ITERATION, learning_rate, model_path, model_name,log_LABEL, batch_size, momentum,num_of_clips_pro_class)
 
 if __name__ == '__main__':
   main()
-
-
 #Train on

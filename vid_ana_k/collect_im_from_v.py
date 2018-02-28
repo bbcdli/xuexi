@@ -5,16 +5,19 @@ import numpy as np
 import c3d_keras_model as c3d_model
 
 PROJ_DIR = os.path.dirname(os.path.abspath(__file__))
-V_READ_PATH = '/home/hy/hy_dev/aggr/aggr_vids/'
+V_READ_PATH = '/home/hy/Documents/hy_dev/aggr/aggr_vids/'
 TMP_SAVE_PATH = os.path.join(PROJ_DIR, 'tmp')
 if not os.path.exists(TMP_SAVE_PATH):
   os.makedirs(TMP_SAVE_PATH)
+
+SAVE_PATH = '/home/hy/hy_dev/aggr/Own_data'
+if not os.path.exists(SAVE_PATH):
+  os.makedirs(SAVE_PATH)
+
 T_dir = sorted([s for s in os.listdir(V_READ_PATH) if '_T.mp4' in s])
 F_dir = sorted([s for s in os.listdir(V_READ_PATH) if '_F.mp4' in s])
 
-SAVE_PATH = '/home/hy/hy_dev/aggr/Own_data'
 clip_len = 16
-
 
 def reduce_mean_stdev(images, print_val=False):
   mean = np.mean(images)
@@ -65,14 +68,20 @@ def collect_subclip_to_frames_rnd(vid,num_of_clips_to_gen,fps,V_FILE):
   np_arr_data = np.array(clipsdata).astype(np.float32)
   np_arr_label = np.array(label_clips).astype(np.int64)
   np_arr_label_onehot = dense_to_one_hot(np_arr_label, c3d_model.NUM_CLASSES)
-  print start_frames,'\n',offset_times
+  print 'start frames:{}'.format(start_frames),'\n','offset_times:{:.6}'.format(offset_times)
   return np_arr_data, np_arr_label_onehot
 
 def collect_train_data(num_of_clips_pro_class):
   images_np, labels_np = collect_class_data(num_of_clips_pro_class,V_FILE = T_dir[0])
-  images_np_2, labels_np_2 = collect_class_data(num_of_clips_pro_class,V_FILE = F_dir[0])
-  images_np = np.concatenate((images_np,images_np_2),axis=0)
-  labels_np = np.concatenate((labels_np,labels_np_2),axis=0)
+  #images_np2, labels_np2 = collect_class_data(num_of_clips_pro_class/2,V_FILE = T_dir[1])
+
+  #images_np = np.concatenate((images_np, images_np2), axis=0)
+  #labels_np = np.concatenate((labels_np, labels_np2), axis=0)
+
+  images_np3, labels_np3 = collect_class_data(num_of_clips_pro_class,V_FILE = F_dir[0])
+
+  images_np = np.concatenate((images_np,images_np3),axis=0)
+  labels_np = np.concatenate((labels_np,labels_np3),axis=0)
   return images_np, labels_np
 
 def collect_test_data(num_of_clips_pro_class):
