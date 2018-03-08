@@ -1,3 +1,64 @@
+#add user to docker folder permission
+sudo chown "$USER":"$USER" /home/"$USER"/.docker -R
+sudo chmod g+rwx "/home/$USER/.docker" -R
+
+sudo gpasswd –a $USER docker           #restart to use docker without sudo
+sudo chown -R $USER:$USER local_folder #when denied
+
 #print restricted length of string, use :.6 to print total 6 characters
 a=4;b='0.0002456';print '{}'.format(a),'\n','{:.6}'.format(b)
 
+http://blog.csdn.net/u010214003/article/details/41963187
+
+清楚掌握open、close、read、write、fopen、fgets、fclose、fwrite、fprintf等函数；知道open和fopen的区别；对于strcpy、strstr、strcmp、strncmp、strcasecmp、strcat、memset、memcpy
+
+SHELL命令及编程《LINUX与UNIX Shell编程指南》我一直用它。内容包括ls–ltr、find、grep、tar、gzip、ftp、top、cp、mv、chmod、chown、useradd、env、vi、more、cat、paste、diff、tail、head、history、split、df、wc
+
+#save from line to line by matching pattern
+$sed -n '/train binary/,/set checkpoint/p' log_only_sil.log > log_only_sil_filenames.log    #print from xx to yy(use , to escape /)
+$sed ‘/set checkpoint/q’ <file>    #print until pattern ‘set checkpoint’ found
+
+sudo lshw -C network | grep 'logical name'   #show hardware for network and filter showing 'logical name'
+
+#change power save on ubuntu for wifi, set to 2 to enable wifi without reboot
+sudo sed -i 's/wifi.powersave = 3/wifi.powersave = 2/' /etc/NetworkManager/conf.d/default-wifi-powersave-on.conf
+
+pip is unsafe with sudo, if permission denied, then use pip install something --user   #add --user in the end
+
+tar -xzvf archive.tar.gz   #extract
+tar -czvf archive.tar.gz /home/ubuntu --exclude=*.mp4    #compress, exclude some files
+
+when var.. is locked first check if using pip or apt-get install which is the right one, apt-get update, if not work, do following 
+*     $sudo rm /var/lib/apt/lists/lock
+*     $sudo rm /var/cache/apt/archives/lock
+*     $sudo rm /var/lib/dpkg/lock
+
+larger image size with the same net does not improve performance.Following strategies
+A.find similar patches for training 	
+B.crop seeds into parts, find similar parts, create patches of similar parts for training
+
+A problem with port 8888 occurs, changed it to 8877 for localhost in ubuntu proxy setup.
+
+h5py is working after following command
+*     $pip install -U tensorflow –- user
+
+way to pass mima, dan bu an quan
+*     echo "mimastring" | sudo docker exec modeldb python "/model_db/client/python/samples/basic/BasicSyncAll.py"
+
+# copy and exclude some files
+rsync -av --exclude 'fl_*' user@server:/my/dir
+
+# linux kernel
+$uname -a for all information regarding the kernel version,
+$uname -r for the exact kernel version
+$lsb_release -afor all information related to the Ubuntu version,
+$lsb_release -r for the exact version
+$sudo fdisk -l for partition information with all details.
+
+# Open
+count unique
+
+=SUMPRODUCT((F2:F10<>"")/(COUNTIF(F2:F10,F2:F10)+(F2:F10="")))
+
+# py
+print 'precision:{:.2f}'.format(a[0][0]/(a[0][0] + a[1][1]))
