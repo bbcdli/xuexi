@@ -1,0 +1,140 @@
+
+#I.    zhuang virutalbox  
+download the packet from oracle, double click the package, ta hui zai software center da kai, click install.
+
+or: sudo dpkg -i YourDebPackage.deb
+
+install pycharm: download free community and extract with $tar xzvf <file.tar.gz>, go to /bin/ of this package and start ./pycharm.sh
+do not use apt-get install pycharm, it is professional version.
+
+Set up VM
+
+1.     Proxy config
+Browser - preference - advanced - network – manual proxy config
+
+HTTP proxy: 101.15.60.1, Port:9400 use this proxy for all protocols
+
+Localhost, 127.0.0.1 
+
+(when debuging a wang app, adding the test ip into the list of no-proxy solved the problem)
+
+#Following item 2 is not used in the installation u3
+2.     in root directory 'cd ~'  add proxy config to .bashrc file,  gedit .bashrc (look up again where exactly)
+inside .bashrc file
+*      #Export proxy configuration for proxy
+*      export http_proxy=http://101.15.60.1:9200
+*      export https_proxy=https://101.15.60.1:9200
+
+3.     creating a new file 'apt.conf' and add lines to it to enable installing from internet, it also allows to open a page in browser: 
+$ sudo gedit /etc/apt/apt.conf
+inside apt.conf file
+*      Acquire::http::Proxy "http://101.15.60.1:9400";
+*      Acquire::https::Proxy "https://101.15.60.1:9400";
+
+4.     apt-get update
+5.     in VM set bidirectional drag+drop  (ke yi kai zhe VM)
+6.     install
+*      $ sudo apt-get install virtualbox-guest-dkms
+*      $ sudo apt-get install virtualbox-guest-utils
+
+
+7.     create shared folder in VM menu(gong xiang wen jian jia, ke yi kai zhe VM)
+Path: D:\local_proj_share
+
+Folder-Name: ABC, xuan shang ‘auto connect’, ‘permenent erzeugen’
+
+The folder /media/sf_ABC will be created, it still does not show   # 'sf_' will be added automatically as prefix
+
+Inside VM cmd: 
+*      $ sudo usermod –aG vboxsf your_VM_username  # 
+
+in VM top menu bar ‘device’-‘guest-extension’-run-accept!! 
+Finally restart!!
+
+*     to enable internet behind proxy, need cntlm tool
+sudo apt-get install cntlm
+sudo cntlm ad01 win_usr_name_or_host_sys_usr_name -H    #generate pw for network2
+sudo nano cntlm.conf
+change default password to newly generated pw for network2
+change default proxy to actual proxy
+
+optional features
+*.     Make sure View -> Auto-resize Guest Display is checked.
+
+Show menu: right ^ + C, hide menu
+Guest Additions
+
+1.     Power on virtual machine
+2.     Click "Devices" on the VirtualBox menu at the top of the screen
+3.     Click "Install Guest Additions CD Image..."
+4.     Follow the on-screen prompts as needed, enter your password, etc.
+5.     Restart the virtual machine
+#
+
+Show menu: right ^ + C, hide menu
+
+
+
+
+
+
+#II.    ssh
+*     ssh -X abc@197.0.0.1     #abc@197.0.1 shi ip of server or another computer
+enter password: 123, if success it will show from ip
+ 
+
+Transfer files from VM to server using scp: log into server, then open another terminal in VM and type command:
+*     $ scp -v -r /home/Documents/local_data/ abc@197.0.0.1:/home/adas_server/Li/Data/ 
+jieshi: option -v: move files, option -v -r: move folders
+
+Move folder From server to VM, also type command in VM:
+*     $ scp -v abc@197.0.0.1: /home/adas/Li/Data/some.jpg. /host_current_path
+*     exit     #type exit to quit a ssh session
+
+ssh - Y( or -X) y@ <ip>, pw:, sometimes it can only access to one assigned folder, so when transferring file make sure the destination is correct
+
+
+Erstellen der ssh-configuration unter <home>\.ssh\config
+
+#copy Keys
+
+#copy id_rsa_ccbox_deploy to <home>\.ssh\config\keys
+
+#you shi xu yao zhuang 'connect'
+
+sudo apt install connect-proxy
+
+Zugriff auf tunnellister testen
+
+ssh tunnellister@y_tunnel(gai le)
+
+Zugriff auf Teststand testen
+
+ssh testmxa-130(ke neng qita)
+
+Zugriff auf Anlage testen
+
+ssh testbox-203(ke neng qita)
+
+
+#III.    usb-bootable
+
+http://www.makeuseof.com/tag/install-ubuntu-computer-using-usb-flash-drive/
+
+*     format a USB in FAT32 format
+*     double click the usb-flash-drive.exe
+*     select iso file and path of USB, set 0 for the optional field for persistence size
+*     click ok, wait to complet, OK.
+
+
+better tools I am also using YUMI-2.0.2.0.exe:
+to make a multi-iso bootable usb
+- double click YUMI-2.0.2.0.exe 
+- follow instructions select 1.usb path 2.path containing the .iso in local computer
+after making a usb containing multi-iso boot list, you still can save other documents in a separate folder
+
+ru guo yi jing installed once, ke yi add or remove names from the menu
+- double click YUMI-2.0.2.0.exe
+- select 1.usb path 2.path containing the .iso in local computer 3. check the box for removing old name if there is any .iso of old system you do not need any more 4. check format if you want to clean all contents on usb
+- click next
+- wait the pop-up window to finish and the terminal message "All complete". OK
