@@ -1,0 +1,196 @@
+sudo gpasswd –a $USER docker   #restart to use docker without sudo
+
+sudo chown -R $USER:$USER local_folder    #when denied
+
+## # I.docker: zhuang zai VM-ubuntu 16.04 for no proxy or with proxy
+1.     sudo apt-get remove docker docker-engine docker.io    #remove old
+2.     $ sudo apt-get update
+3.     $ sudo apt-get install apt-transport-https ca-certificates curl software-properties-common  #allow apt to use repo
+4.     $ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -    #add key
+5.     $sudo apt-key fingerprint 0EBFCD88    #verify it is '0EBFCD88'
+6.     $ sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+#set up stable repo
+7.     $ sudo apt-get update   #update
+8.     #methodI.#install  $ sudo apt-get install docker-ce        
+(8).     #methodII(not used).#on production system, specific version should be installed, now always the newest. use following command to check version
+apt-cache madison docker-ce
+
+   #then install
+   $ sudo apt-get install docker-ce=<VERSION>
+9.     $ sudo docker run hello-world (if now proxy used it should work now, otherwise, see below to add proxy env)  #verify
+
+1111111111111111111111111111
+shell
+sudo apt-get update
+sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+sudo apt-get update
+sudo apt-get install -y docker-ce
+sudo docker run hello-world
+1111111111111111111111111111
+
+#zhi hou, yao yong command systemctl he service fen bie qidong docker
+## #jianli app 
+In VM, refer to following page
+
+https://docs.docker.com/engine/admin/systemd/#start-the-docker-daemon
+
+*     $ sudo systemctl start docker 
+*     $ sudo service docker start
+
+#create a file and add environment into it
+*     $ sudo mkdir -p /etc/systemd/system/docker.service.d
+
+# II. only for behind an HTTPS proxy server
+# create a file called /etc/systemd/system/docker.service.d/https-proxy.conf
+inside this conf file
+*     [Service]
+*     Environment="HTTP_PROXY=http://proxy.example.com:443/"
+*     Environment="HTTPS_PROXY=https://proxy.example.com:443/"
+
+< important: also need to add setting in Dockerfile alone does not work as well. Do put the env setting lines just before the line for importing pip, not the very beginning of the Dockerfile>
+
+#after adding environment do reload, restart as follows
+*     $ sudo systemctl daemon-reload
+*     $ sudo systemctl restart docker
+
+#verify environment, important
+*     $ systemctl show --property=Environment docker
+
+#should show: Environment=HTTPS_PROXY=https://proxy.example.com:80/
+*     $ sudo run docker hello world
+
+#example for building app to be used on docker https://docs.docker.com/get-started/part2/#build-the-app
+
+*     $ sudo docker build –t friendlyname ./      #final arg is current path
+*     $ sudo docker run -p 4000:80 friendlyname   
+
+2222
+# basic docker commands
+
+#save and copy the saved file. (example is the name of an image in 'docker images' list result)
+*     $ docker save -o ImageName > ./example.tar
+
+#on some remote pc cannot use option -o for output
+*     $ docker save ImageName > ./example.tar
+
+#now in another computer, in which docker is installed you can load the copy of the image file
+
+#after loading check with docker images, the file should be listed in the list now.
+*     $ docker load -i example.**tar**
+
+#run. use /bin/bash at the end to specify using shell to run. #can be run anywhere, as the image is loaded to docker
+'docker run -i -t ubuntu:12.04 /bin/bash' or use 'docker run -i -t <ImageID8dbd9e392a96> /bin/bash'
+
+# III. Container
+*     $ docker ps -a #lists all containers, 
+*     $ docker start <containerID>
+*     $ docker attach <containerID>
+edit container, exit
+
+if want to create image from container, then use docker commit container_mingzi
+
+*     $ docker commit -a <auther> -m <remark> <containerID> <newImageRepoName>
+*     $ docker images   #lists images
+*     $ docker run -it -e ROOT_PASSWORD=root img_name    #use -e to specify environment
+*     $ docker run image_name:tag_name   #simple run
+*     $ sudo docker run -p 4000:80 example   #depends on what app is inside the docker image, here -p 4000:80 are the correct input arguments for the app
+*     $ sudo docker -f fd484f19954f   #remove a docker image by specifying the ID, this works better than 'rmi repository_name'
+
+
+#clean up images, containers that are dangling ( all not associated images)
+*     $ docker system prune
+*     $ docker system prune –a     #also remove any stopped containers
+*     $ docker images –a   #list all images
+*     $ sudo docker rmi $(sudo docker images -a -q)   #remove all non associated images with twice sudo command
+*     $ docker rmi <image-ID> <image-tag>  #sometimes does not work
+*     $ docker rmi <REPOSITORY>    #remove the name if it has the same tag and ID with others
+*     $ docker rm $(docker ps -q -f status=exited)     #remove all exited containers
+
+#3333  https://www.civisanalytics.com/blog/using-docker-to-run-python/
+#3 go to inside container and install most common dev env, commit
+
+*      $ docker run -it <DockerImagename> /bin/bash       #/bin/bash is for enabling shell
+*      $root@<containerIDxxx>: apt-get update  #now this cmd can be run behind proxy
+*      $root@<containerIDxxx>: apt-get install python-dev  # numpy,os,sys,math are installed together with this package
+*      $root@<containerIDxxx>: apt-get install python-pip
+*      $root@<containerIDxxx>: apt-get install python-opencv
+*      $root@<containerIDxxx>: pip install tensorflow
+*      $root@<containerIDxxx>: pip install Pillow
+*      $root@<containerIDxxx>: exit                           #exit container
+*      $ docker commit containerID newImageRepositoryName        #commit
+
+
+
+#4444 https://www.techrepublic.com/article/how-to-share-data-between-a-docker-container-and-host/
+
+*      $ sudo docker run -it -d -P --name new_container_name -v /home/hy/data:/home<or_a_custom_path_created_before_and_commited> <ubuntuImageID> /bin/bash
+
+<Note: if proxy is used, the options '-d -P' should not be added. See below>:
+*      Create /home/hy/aggr in container, create /home/hy/container-data in host
+
+*      $ docker run -it -v /home/hy/container-data:/home/hy/aggr ubuntu_aggr /bin/bash  # this is used when proxy is required      #ubuntu_aggr is a previously committed ImageID, in the container associated with this image the dir "/home/hy/aggr" has been already created.
+output
+*      $root@<new_container_ID>
+
+in both cases, open another terminal and type
+*      $ sudo docker ps -a             # find the corresponding containerID
+*      $ sudo docker start <the_new_containerID>
+*      $ sudo docker attach <the_new_containerID>        #press ENTER twice, then inside container, look for the linked dir /home/...
+
+
+5555 you proxy shi anzhuang container 
+1.     jian li Dockerfile
+inside the file
+
+*      #FROM python:2.7-slim
+*      FROM ubuntu
+*      #Set the working directory to /app
+*      #WORKDIR /app
+*      #Copy the current directory contents into the container at /app
+*      #ADD . /app
+*      #Set proxy server, replace host:port with values for your servers
+*      ENV http_proxy "http://191.142.0.1:9200"
+*      ENV https_proxy "https://191.142.0.1:9200"
+
+<jieshi: FROM ubuntu means the app to be built is based on existed Image ubuntu. If no version is specified the lastest version will be pulled. Other commented WORKDIR, ADD are not important at this stage. Set proxy is important: Keyword ENV, http_proxy, https_proxy, format with space and " " for the addresses.>
+
+2.     build the package containing the Dockerfile
+*      $ docker build -t <DockerImageName> ./   # ./ is current location
+
+3.     Now the most common dev environment can be installed even behind proxy
+
+666 another way to use docker build when the environment should be installed at connection time
+Create an extra file requirement.txt, in which some packages can be listed for installation at connection time
+# Install any needed packages specified in requirements.txt. But this way does not work for proxy. Example:
+
+
+# The Dockerfile example for the case no proxy: Note Dockerfile has no .txt for the file name
+*     RUN pip install --trusted -host pypi.python.org -r
+
+*     # Make port 80 available to the world outside this container
+*     # EXPOSE 80
+*     # Define environment variable
+*     # ENV NAME World
+*     RUN apt-get update & & apt-get install -y pkg -config python-dev python-opencv libopencv-dev libhdf5-dev python-h5py
+
+*     # Run app.py when the container launches
+*     CMD["python", "train_ssh.py"]
+
+
+
+
+requirements example for install at loading
+
+#apt-get update && apt-get install -y pkg-config python-dev python-opencv libopencv-#dev libav-tools libjpeg-dev libpng-dev libtiff-dev libjasper-dev python-numpy
+
+# python-pycurl python-opencv
+
+keras==1.2.2
+tflearn
+imutils
+cython
+tensorflow
+numpy>=1.11
+Pillow>=2.0.0
