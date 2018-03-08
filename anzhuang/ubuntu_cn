@@ -1,0 +1,69 @@
+# add zhongwen
+. Enable Chinese Language Support
+
+a - Click System Settings, Click Language Support
+
+b - Ensure that Keyboard input method system: is set to IBus
+
+c - Click Install / Remove Languages..
+
+d - Choose Chinese (simplified) and/or Chinese (traditional)
+
+e - Click Apply Changes
+>Logout Login<
+2. Install Additional Chinese Input Systems
+
+a - Open Ubuntu Software Center
+
+b - Search for and install ibus-m17n
+>Logout Login<
+3. Select And Enable Your Input Systems
+
+a - Click System Settings, Click Text Entry
+
+b - Click the + button to add new methods
+
+c - Select Chinese (Pinyin), click Add
+
+this allows you to type characters 汉字
+
+d - Select Chinese (SunPinyin), click Add
+
+this also allows you to type chinese characters 汉字 (optional alternative)
+
+e - select Chinese (hanyu pinyin (m17n)), click Add
+
+this allows you to type hànyǔ pīnyīn (english characters with tone markers)
+>Logout Login<
+4. Test It Out
+Troubleshooting
+
+If when using Chinese(Pinyin) you have the bug where typing hanyu suggests ha nü sh and other similar, syllabic separation problems, first try this..
+
+Open the terminal, Enter ibus restart
+
+if that doesn't work here are a few other suggestions at Pinyin Joe
+Random Tips
+
+    Press super key + space to toggle between language inputs.
+        super key is the windows key
+    Each language input has its own settings to customize usability.
+        Ex. On the language bar select Pinyin, click preferences.
+
+VM
+download package to win or ubuntu
+
+ win
+ double click .exe to install
+ ubuntu
+ sudo dpkg -i <filename.deb>
+ 
+the rest is same for both
+add new VM, name it and add save to local disk, set RAM, Processor number, enable 3D accelerate
+setup - storage - select DVD and click the item with .iso, OK.
+
+start - install -restart. 
+
+Add shared folder: setup - shared folder - select folder in local disk, set bidirectional pick, set as permernant mount and automatic mount.
+
+start -menu-device- guest addition, create a folder as shared folder
