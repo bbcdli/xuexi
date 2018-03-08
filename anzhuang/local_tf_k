@@ -1,0 +1,50 @@
+xxx in software center:
+vlc 
+
+ffmepg
+
+1. tensorflow
+*     $sudo apt-get install python-pip python-dev
+*     $sudo apt-get install python-sklearn
+*     $pip install opencv-python
+*     $sudo pip install tensorflow   #must check which is desired:cpu or if gpu, then install tensorflow_gpu
+*     $sudo -E pip install imutils
+*     $sudo -E pip install --upgrade scipy
+
+if 'sudo -E pip install tensorflow' is entered, the most latest version will be installed)
+
+1.1 how to upgrade tensorflow: 
+*     $sudo pip uninstall protobuf
+*     $sudo pip uninstall tensorflow
+*     $sudo pip install --upgrade https: // .....look up address for desired version
+1.2  how to uninstall tf
+*     $sudo pip uninstall tensorflow
+
+2. keras + tf for bg
+*     $sudo apt-get install python-dev            #scipy included?
+*     $sudo apt-get install python-pip
+*     $sudo apt-get install python-opencv
+*     $sudo -E apt-get install libhdf5-dev 
+*     $sudo -E apt-get install cython 
+*     $sudo apt-get install python-h5py
+*     $sudo -E pip install keras( if installed wrong version, type 'pip uninstall keras' to uninstall)
+*     $sudo -E pip install tflearn 
+*     $sudo pip install scikit-learn
+*     $sudo pip install imutils
+
+2.1 install keras with specific version
+*     $sudo pip install keras==1.2.2
+*     $sudo pip install tensorflow        #numpy included
+
+
+2.2 install keras for training c3d
+#keras
+*     $pip install keras
+*     $apt-get install libhdf5-dev -y
+*     $apt-get install python-h5py -y
+3. pip
+how to upgrade pip
+*     $pip install --upgrade pip       #(bu neng jia sudo)
+
+4.pandas
+*    $sudo pip install pandas
