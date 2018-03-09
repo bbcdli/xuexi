@@ -2,6 +2,26 @@ sudo gpasswd –a $USER docker   #restart to use docker without sudo
 
 sudo chown -R $USER:$USER local_folder    #when denied
 
+#xserver
+$ apt-cache show xserver-xorg | grep Version    #check xserver version
+$xhost local:root  #use this command on local terminal to enable root to have access to xserver, 
+so when inside docker if .Xauthority is mounted, the root on docker will also have access to xserver,
+thus graphical application can be displayed.
+The complete docker run command ruxia:
+docker run --name occupancy -it -v /home/hy/.Xauthority:/home/hy/.Xauthority 
+-v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY -v `pwd`:/home/occupancy/ 
+-p 8008:8008 -w /home/occupancy/ docker_occ /bin/bash
+
+Jieshi
+--name occupancy : give a name for the container
+-v /home/hy/.Xauthority:/home/hy/.Xautority : mount the local .Xauthority file to docker container
+-v /tmp/.X11-unix:/tmp/.X11-unit : also mount xserver related to docker container
+-v pwd`:/home/occupancy/  : mount mu qian mulu to a docker container path
+-p 8008:8008  : enable port 8008 for a container
+-w /home/occ/  : she ding jing ru container hou de qi shi wei zhi
+docker_occ  : zhe li shi docker Image wen jian ming
+/bin/bash   : qi dong docker container hou jiang zhi xing de di yi ge command
+
 ## # I.docker: zhuang zai VM-ubuntu 16.04 for no proxy or with proxy
 1.     sudo apt-get remove docker docker-engine docker.io    #remove old
 2.     $ sudo apt-get update
