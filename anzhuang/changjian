@@ -5,8 +5,7 @@ sudo chmod g+rwx "/home/$USER/.docker" -R
 sudo gpasswd –a $USER docker           #restart to use docker without sudo
 sudo chown -R $USER:$USER local_folder #when denied
 
-#xserver
-$ apt-cache show xserver-xorg | grep Version    #check xserver version
+
 
 in shell use ${PWD} or `pwd` to get current directory path
 
