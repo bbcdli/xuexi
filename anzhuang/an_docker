@@ -16,7 +16,8 @@ Jieshi
 --name occupancy : give a name for the container
 -v /home/hy/.Xauthority:/home/hy/.Xautority : mount the local .Xauthority file to docker container
 -v /tmp/.X11-unix:/tmp/.X11-unit : also mount xserver related to docker container
--v pwd`:/home/occupancy/  : mount mu qian mulu to a docker container path
+-e DISPLAY : pass environment variable DISPLAY in local to docker container, can also use -e DISPLAY=$DISPLAY
+-v `pwd`:/home/occupancy/  : mount mu qian mulu to a docker container path, special `, can also use ${PWD}
 -p 8008:8008  : enable port 8008 for a container
 -w /home/occ/  : she ding jing ru container hou de qi shi wei zhi
 docker_occ  : zhe li shi docker Image wen jian ming
