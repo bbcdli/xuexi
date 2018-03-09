@@ -5,6 +5,8 @@ sudo chmod g+rwx "/home/$USER/.docker" -R
 sudo gpasswd –a $USER docker           #restart to use docker without sudo
 sudo chown -R $USER:$USER local_folder #when denied
 
+$ apt-cache show xserver-xorg | grep Version    #check xserver version
+
 #print restricted length of string, use :.6 to print total 6 characters
 a=4;b='0.0002456';print '{}'.format(a),'\n','{:.6}'.format(b)
 
