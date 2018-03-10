@@ -2,18 +2,38 @@ sudo gpasswd –a $USER docker   #restart to use docker without sudo
 
 sudo chown -R $USER:$USER local_folder    #when denied
 
-#xserver
+#xserver  http://www.leidinger.net/X/xhost.html
 $ apt-cache show xserver-xorg | grep Version    #check xserver version
 $xhost local:root  #use this command on local terminal to enable root to have access to xserver, 
 so when inside docker if .Xauthority is mounted, the root on docker will also have access to xserver,
 thus graphical application can be displayed.
+BUT it is not secure
+some knowledges:
+command: xhost
+access control enabled, only authorized clients can connect  #if return this output after command xhost, then OK.
+
+xhost -  #always safe to use -, not +, use + hui shi ni de diannao gongkai le
+
+Add a user to container, use useradd not fan guo lai
+useradd -ms /bin/bash mynewuser
+
+To revert yige acess, i.e. remove some user from access list
+$ xhost -local:root
+non-network local connections being removed from access control list (zhi qian tong guo xhost local:root da kai de
+access xian zai guan shang le)
+
 The complete docker run command ruxia:
+docker run --name occupancy -u `id -u` -it -v /home/hy/.Xauthority:/home/hy/.Xauthority 
+-v /tmp/.X11-unix:/tmp/.X11-unix -v /etc/localtime:/etc/localtime:ro -e DISPLAY 
+-v `pwd`:/home/occupancy/ -p 8008:8008 -w /home/occupancy/ docker_occ /bin/bash
+
 docker run --name occupancy -it -v /home/hy/.Xauthority:/home/hy/.Xauthority 
 -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY -v `pwd`:/home/occupancy/ 
 -p 8008:8008 -w /home/occupancy/ docker_occ /bin/bash
 
 Jieshi
 --name occupancy : give a name for the container
+-u `id -u` : match user of local numerical id to container
 -v /home/hy/.Xauthority:/home/hy/.Xautority : mount the local .Xauthority file to docker container
 -v /tmp/.X11-unix:/tmp/.X11-unit : also mount xserver related to docker container
 -e DISPLAY : pass environment variable DISPLAY in local to docker container, can also use -e DISPLAY=$DISPLAY
@@ -22,6 +42,17 @@ Jieshi
 -w /home/occ/  : she ding jing ru container hou de qi shi wei zhi
 docker_occ  : zhe li shi docker Image wen jian ming
 /bin/bash   : qi dong docker container hou jiang zhi xing de di yi ge command
+
+#########################################################################
+some common explainations https://stackoverflow.com/questions/43015536/xhost-command-for-docker-gui-apps-eclipse
+-i  : interactive
+--net=host: host networking, the container is not launched with an isolated network stack. Instead, all networking interfaces of the host are directly accessible inside the container.
+--rm automatically cleanup the container on exit. Otherwise the container will remain in a stopped state.
+-e DISPLAY pass through the DISPLAY environment variable from the host into the container. This tells GUI programs where to send their output.
+-v $HOME/workspace/:/workspace/:z map the workspace folder from your home directory on the host to the /workspace folder inside the container with selinux sharing settings enabled.
+docbill/ubuntu-umake-eclipse run this image, authored by user docbill on the docker hub (anyone is able to create an account here). This is not an official image from docker but a community submitted image.
+#########################################################################
+
 
 ## # I.docker: zhuang zai VM-ubuntu 16.04 for no proxy or with proxy
 1.     sudo apt-get remove docker docker-engine docker.io    #remove old
