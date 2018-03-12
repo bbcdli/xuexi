@@ -33,6 +33,9 @@ pip is unsafe with sudo, if permission denied, then use pip install something --
 tar -xzvf archive.tar.gz   #extract
 tar -czvf archive.tar.gz /home/ubuntu --exclude=*.mp4    #compress, exclude some files
 
+remove system error report
+$sudo rm /var/crash/*
+
 when var.. is locked first check if using pip or apt-get install which is the right one, apt-get update, if not work, do following 
 *     $sudo rm /var/lib/apt/lists/lock
 *     $sudo rm /var/cache/apt/archives/lock
