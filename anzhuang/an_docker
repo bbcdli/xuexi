@@ -142,7 +142,8 @@ inside this conf file
 edit container, exit
 
 if want to create image from container, then use docker commit container_mingzi:TAG 
-$ docker commit -m "" `docker ps -l -q` mymod/aggrcaff:v1
+https://docs.oracle.com/cd/E37670_01/E75728/html/section_c5q_n2z_fp.html
+$ docker commit -m "" `docker ps -l -q` mymod/aggrcaff:v1   # !! to check, some error appears when running a script inside container - "core dump"
 #-m: comments  `docker ps -l -q`:collect all     mymod/aggrcaff:a name for the new image   v1: the TAG
 
 *     $ docker commit -a <auther> -m <remark> <containerID> <newImageRepoName>
