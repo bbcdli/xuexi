@@ -1,0 +1,528 @@
+// main.cpp
+
+#include <iostream>
+#include <fstream>
+
+#include "opencv2/opencv.hpp"
+
+#include "ue3.h"
+
+using namespace std;
+
+void createNegativeTxtFile(std::vector<imageLabel> &records,
+    std::vector<unsigned int> positiveCategory)
+{
+  string filePath = "negatives.txt";
+  ofstream file;
+
+  file.open(filePath, std::ofstream::out | std::ofstream::trunc);
+  if (!file.is_open())
+  {
+    std::cerr << "Cannot create negative file" << std::endl;
+    return;
+  }
+
+  for (unsigned int i = 0; i < records.size(); i++)
+  {
+    bool write = true;
+    std::vector<labeledROI> &rois = records.at(i).rois;
+    for (unsigned int r = 0; r < rois.size(); r++)
+    {
+      labeledROI& label = rois.at(r);
+      std::vector<unsigned int>::iterator iter = find(positiveCategory.begin(),
+          positiveCategory.end(), label.classID);
+      if (iter != positiveCategory.end())
+      {
+        // belongs not to positive category
+        write = false;
+      }
+    }
+    if (write)
+    {
+      file << IMAGE_DIR << records.at(i).filename << endl;
+    }
+  }
+  file.close();
+}
+
+void createPositiveInfoFile(std::vector<imageLabel> &records,
+    std::vector<unsigned int> positiveCategory)
+{
+  string filePath = "positives.info";
+  ofstream file;
+
+  file.open(filePath, std::ofstream::out | std::ofstream::trunc);
+  if (!file.is_open())
+  {
+    std::cerr << "Cannot create positive file" << std::endl;
+    return;
+  }
+
+  for (unsigned int i = 0; i < records.size(); i++)
+  {
+    vector<cv::Rect> positiveRois;
+    std::vector<labeledROI> &rois = records.at(i).rois;
+    for (unsigned int r = 0; r < rois.size(); r++)
+    {
+      labeledROI& label = rois.at(r);
+      std::vector<unsigned int>::iterator iter = find(positiveCategory.begin(),
+          positiveCategory.end(), label.classID);
+      if (iter != positiveCategory.end())
+      {
+        // belongs to positive category
+        positiveRois.push_back(cv::Rect(label.roi));
+      }
+    }
+
+    if (positiveRois.size() > 0)
+    {
+      file << IMAGE_DIR << records.at(i).filename << "\t"
+          << positiveRois.size();
+      vector<cv::Rect>::iterator iter;
+      for (iter = positiveRois.begin(); iter != positiveRois.end(); iter++)
+      {
+        file << "\t" << iter->x << " " << iter->y << " " << iter->width << " "
+            << iter->height;
+      }
+      file << endl;
+    }
+  }
+  file.close();
+}
+
+// this method finds rois in an image and stores them into the rois vector as cv::Rect
+void detectROIs(cv::Mat image, std::vector<cv::Rect> &rois)
+{
+}
+
+// main program execution
+int main(int argc, char* argv[])
+{
+  std::cout << std::endl << "---- UE 3 ----" << std::endl << std::endl;
+
+  // take care of the reading stuff
+  std::cout << "[info]\treading ground truth textfile.." << std::endl;
+  std::vector<imageLabel> records;
+  const std::string GROUND_TRUTH_FILENAME = IMAGE_DIR + "gt.txt";
+  readGroundTruthFile(GROUND_TRUTH_FILENAME, records);
+
+  std::cout << "[info]\tread " << records.size() << " records." << std::endl;
+  std::cout << "[info]\tbrowsing records.." << std::endl;
+
+  std::cout << "Create file for negative examples" << std::endl;
+  createNegativeTxtFile(records, PROHIBITORY);
+
+  std::cout << "Create file for posivite examples" << std::endl;
+  createPositiveInfoFile(records, PROHIBITORY);
+
+  // browse records with defined relevant classes
+  int key = browseImages(records, PROHIBITORY);
+
+  return 0;
+}
+
+
+inc/main.h
+// ue2.h
+
+// makes sure this file is included only once
+#pragma once
+
+#include "opencv2/opencv.hpp"
+#include <iostream>
+#include <fstream>
+#include <chrono>
+
+// define path
+const std::string IMAGE_DIR = "/home/twobeers/workspace/bga/GTSDB/";
+
+// create categories of traffic signs
+const std::vector<unsigned int> PROHIBITORY = { 0, 1, 2, 3, 4, 5, 7, 8, 9, 10,
+    15, 16 };
+const std::vector<unsigned int> MANDATORY = { 33, 34, 35, 36, 37, 38, 39, 40 };
+const std::vector<unsigned int> DANGER = { 11, 18, 19, 20, 21, 22, 23, 24, 25,
+    26, 27, 28, 29, 30, 31 };
+const std::vector<unsigned int> ALL;
+
+// define data structures
+struct labeledROI
+{
+  cv::Rect roi;
+  unsigned int classID;
+};
+
+struct imageLabel
+{
+  std::string filename;
+  std::vector<labeledROI> rois;
+};
+
+// this method is suitable for splitting a string into a vector of substrings, divided by a delimiter character
+// source: http://stackoverflow.com/questions/236129/split-a-string-in-c
+// usage: create a vector of strings, then call split(string, delimiter, vector);
+std::vector<std::string> &split(const std::string &s, char delim,
+    std::vector<std::string> &elems)
+{
+  std::stringstream ss(s);
+  std::string item;
+  while (std::getline(ss, item, delim))
+  {
+    elems.push_back(item);
+  }
+  return elems;
+}
+
+// this method reads the ground truth file
+// it puts all data into the labels-vector
+void readGroundTruthFile(const std::string filename,
+    std::vector<imageLabel> &records)
+{
+  // open ground truth file
+  std::ifstream gtFile(filename);
+
+  while (gtFile.good())
+  {
+    // read record (whole line)
+    std::string tmp;
+    std::getline(gtFile, tmp);
+
+    // split line into elements
+    std::vector<std::string> strings;
+    split(tmp, ';', strings);
+
+    // simple check
+    if (strings.size() != 6)
+    {
+      std::cout << "ALERT: number of elements is not 6, instead: "
+          << strings.size() << std::endl;
+      std::cout << "stopping to read file." << std::endl;
+      continue;
+    }
+
+    // write roi elements into roi record
+    labeledROI record;
+
+    cv::Rect rect;
+    rect.x = std::stoul(strings[1]); // leftcol
+    rect.y = std::stoul(strings[2]); // toprow
+    rect.width = std::stoul(strings[3]) - rect.x; // rightcol - leftcol
+    rect.height = std::stoul(strings[4]) - rect.y; // bottomrow - toprow
+    record.roi = rect;
+    record.classID = std::stoul(strings[5]); // classid
+
+    // check if new imagelabel has to be created
+    if (records.empty() || records.back().filename != strings[0])
+    {
+      imageLabel label;
+      label.filename = strings[0];
+      records.push_back(label);
+    }
+
+    // push roi to last imagelabel
+    records.back().rois.push_back(record);
+  }
+}
+
+// check if classID is relevant
+// i.e. return true if vector is empty or classID is contained in the vector
+bool isClassRelevant(const std::vector<unsigned int> relevantClasses,
+    const unsigned int classID)
+{
+  return (relevantClasses.empty()
+      || (std::find(relevantClasses.begin(), relevantClasses.end(), classID)
+          != relevantClasses.end()));
+}
+
+// jaccard similarity coefficient
+// overlap/covered area, in range [0,1]
+const double jaccardScore(const cv::Rect roi1, const cv::Rect roi2)
+{
+  return 1. * (roi1 & roi2).area() / (roi1 | roi2).area();
+}
+
+// this method evaluates detection
+// it needs the labeled and detected rois, evaluates and increments tp, fp, fn respectively
+void evaluateDetection(const std::vector<cv::Rect> labelROIs,
+    const std::vector<cv::Rect> detectedROIs, unsigned int &tp,
+    unsigned int &fp, unsigned int &fn)
+{
+  /*
+   if jaccard similarity >= 0.6, the detected roi is a hit.
+   if more than one submitted roi intersects a ground-truth roi with a jaccard >= 0.6,
+   the one with maximum value is used, the others are ignored, i.e., they neither count as hit nor miss.
+
+   so, algorithm works this way:
+   - for each labeled roi:
+   - compute jaccard similarity to all detected rois
+   - check if max value >= 0.6, then increase tp, if not, increase fn
+   - also remember max similarity value for each detected roi
+   - for each detected roi with max similarity < 0.6, increase fp
+   */
+
+  const double SIMILARITY_THRESHOLD = 0.6;
+
+  // create and initialize similarities vector to remember max values for each detected roi
+  std::vector<double> similarities;
+  for (size_t i = 0; i < detectedROIs.size(); ++i)
+  {
+    similarities.push_back(0);
+  }
+
+  // for each labelROI
+  for (size_t i = 0; i < labelROIs.size(); ++i)
+  {
+    // compute similarity to all detected rois, remember max
+    double max_similarity = 0;
+    for (size_t j = 0; j < detectedROIs.size(); ++j)
+    {
+      double similarity = jaccardScore(labelROIs[i], detectedROIs[j]);
+
+      // remember max sim for detected roi
+      if (similarities[j] < similarity)
+        similarities[j] = similarity;
+
+      // remember max sim for label roi
+      if (max_similarity < similarity)
+        max_similarity = similarity;
+    }
+
+    std::cout << "[debug]\tlabelroi " << i << ", max similarity: "
+        << max_similarity << std::endl;
+
+    // if max similarity >= 0.6, we have a true positive, else it is a false negative
+    if (max_similarity >= SIMILARITY_THRESHOLD)
+      tp++;
+    else
+      fn++;
+  }
+
+  // for each detected roi with max similarity < 0.6, increase fp
+  for (size_t i = 0; i < similarities.size(); ++i)
+  {
+    if (similarities[i] < SIMILARITY_THRESHOLD)
+      fp++;
+  }
+
+}
+
+void detectROIs(cv::Mat image, std::vector<cv::Rect> &rois);
+
+// this method browses all images and detects ROIs on the fly
+int browseImages(const std::vector<imageLabel> records,
+    const std::vector<unsigned int> relevantClasses =
+        std::vector<unsigned int>())
+{
+  // return if vector is empty
+  if (records.empty())
+  {
+    std::cout << "vector is empty. cannot browse images." << std::endl;
+    return 0;
+  }
+
+  unsigned int index = 0;
+  bool loopActive = true;
+
+  // browsing loop
+  while (loopActive)
+  {
+    std::cout << "[info]\trecord index: " << index << std::endl;
+
+    // retrieve record and read image
+    imageLabel record = records[index];
+    cv::Mat image;
+    image = cv::imread(IMAGE_DIR + record.filename);
+
+    // detect rois
+    std::vector<cv::Rect> detected_rois;
+    detectROIs(image, detected_rois);
+
+    /*** begin of drawing part ***/
+    // initialize drawing helpers
+    const cv::Scalar GREEN(0, 255, 0);
+    const cv::Scalar RED(0, 0, 255);
+    const double FONT_SCALE = 1.5;
+    const int THICKNESS = 3;
+
+    // draw detected rois
+    for (size_t i = 0; i < detected_rois.size(); ++i)
+    {
+      cv::rectangle(image, detected_rois[i], RED, THICKNESS);
+    }
+
+    // draw labeled rois
+    for (size_t i = 0; i < record.rois.size(); ++i)
+    {
+      labeledROI roi_label = record.rois[i];
+
+      // check if roi should be displayed
+      // will be displayed if relevantClasses vector is empty, or if classID is contained in relevantClasses
+      if (isClassRelevant(relevantClasses, roi_label.classID))
+      {
+        // create relevant points
+        cv::Rect rect = roi_label.roi;
+        cv::Point org = roi_label.roi.br();
+        org.x += 10;
+
+        // draw rectangle
+        cv::rectangle(image, roi_label.roi, GREEN, THICKNESS);
+
+        // draw class ID
+        std::string class_str = "id: " + std::to_string(roi_label.classID);
+        cv::putText(image, class_str, org, CV_FONT_HERSHEY_PLAIN, FONT_SCALE,
+            GREEN, THICKNESS);
+      }
+    }
+
+    // create a window with name "Display" and show the image
+    const std::string WINDOW_1 = "Display";
+    cv::namedWindow(WINDOW_1, CV_WINDOW_AUTOSIZE);
+    //cv::moveWindow(WINDOW_1, 20, 20);
+    cv::imshow(WINDOW_1, image);
+
+    /*** end of drawing part ***/
+
+    /*** begin of evaluation part ***/
+    // for evaluation, we need to write all relevant Rects to a vector
+    std::vector<cv::Rect> labelROIs;
+    for (size_t i = 0; i < record.rois.size(); ++i)
+    {
+      if (isClassRelevant(relevantClasses, record.rois[i].classID))
+      {
+        labelROIs.push_back(record.rois[i].roi);
+      }
+    }
+
+    // now we can compute fp, tp, fn; (compute precision and recall)
+    unsigned int fp = 0, tp = 0, fn = 0;
+    evaluateDetection(labelROIs, detected_rois, tp, fp, fn);
+
+    std::cout << "[info]\tevaluating this single image..." << std::endl;
+    std::cout << "  true positives:\t" << tp << std::endl;
+    std::cout << "  false positives:\t" << fp << std::endl;
+    std::cout << "  false negatives:\t" << fn << std::endl;
+
+    if (tp + fp > 0)
+      std::cout << "  precision:\t" << 1. * tp / (tp + fp) << std::endl;
+    else
+      std::cout << "  precision:\t#undef" << std::endl;
+
+    if (tp + fn > 0)
+      std::cout << "  recall:\t" << 1. * tp / (tp + fn) << std::endl;
+    else
+      std::cout << "  recall:\t#undef" << std::endl;
+    /*** end of evaluation part ***/
+
+    /*** begin of user interface/navigation ***/
+    // wait for user action
+    int key = cv::waitKey(0);
+
+    // depending on the user input, show next/previous image or exit loop
+    switch (key)
+    {
+      // right key: 2555904, increase index, handle overflow
+      case 2555904:
+      case 65363:
+        if (index >= records.size() - 1)
+        {
+          index = 0;
+        }
+        else
+        {
+          index++;
+        }
+        break;
+        // left key: 2424832, decrease index, handle overflow
+      case 2424832:
+      case 65361:
+        if (index <= 0)
+        {
+          index = records.size() - 1;
+        }
+        else
+        {
+          index--;
+        }
+        break;
+        // other key, exit browsing loop
+      default:
+        // close all windows and return key
+        std::cout << "key: " << key << std::endl;
+        cv::destroyAllWindows();
+        return key;
+    }
+  }
+}
+
+// this method runs through all records and evaluates the whole set
+// it also measures the time to run through the set
+void evaluateAllImages(const std::vector<imageLabel> records,
+    const std::vector<unsigned int> relevantClasses =
+        std::vector<unsigned int>())
+{
+  std::cout << std::endl;
+  std::cout << "[info]\t*** processing all images of given dataset ***"
+      << std::endl;
+
+  unsigned int fp = 0, tp = 0, fn = 0;
+
+  // accumulate duration of detection algorithm
+  std::chrono::microseconds duration(0);
+
+  // for each record
+  for (size_t i = 0; i < records.size(); ++i)
+  {
+    // extract labelRects
+    std::vector<cv::Rect> labelROIs;
+    for (size_t j = 0; j < records[i].rois.size(); ++j)
+    {
+      if (isClassRelevant(relevantClasses, records[i].rois[j].classID))
+      {
+        labelROIs.push_back(records[i].rois[j].roi);
+      }
+    }
+
+    // detect ROIs and measure time
+    cv::Mat image;
+    std::vector<cv::Rect> detected_rois;
+    image = cv::imread(IMAGE_DIR + records[i].filename);
+
+    std::chrono::high_resolution_clock::time_point t1 =
+        std::chrono::high_resolution_clock::now();
+    detectROIs(image, detected_rois);
+    std::chrono::high_resolution_clock::time_point t2 =
+        std::chrono::high_resolution_clock::now();
+    duration += std::chrono::duration_cast < std::chrono::microseconds
+        > (t2 - t1);
+
+    // evaluate
+    evaluateDetection(labelROIs, detected_rois, tp, fp, fn);
+  }
+
+  // show evaluation results
+  std::cout << "[info]\tfinished. results:" << std::endl;
+  std::cout << "  true positives:\t" << tp << std::endl;
+  std::cout << "  false positives:\t" << fp << std::endl;
+  std::cout << "  false negatives:\t" << fn << std::endl;
+
+  if (tp + fp > 0)
+    std::cout << "  precision:\t" << 1. * tp / (tp + fp) << std::endl;
+  else
+    std::cout << "  precision:\t#undef" << std::endl;
+
+  if (tp + fn > 0)
+    std::cout << "  recall:\t" << 1. * tp / (tp + fn) << std::endl;
+  else
+    std::cout << "  recall:\t#undef" << std::endl;
+
+  // show time results
+  auto duration_all_ms = std::chrono::duration_cast < std::chrono::milliseconds
+      > (duration).count();
+  double duration_per_img_ms = 1. * duration_all_ms / records.size();
+  std::cout << "  " << duration_all_ms << " ms for " << records.size()
+      << " images (that's a mean value of " << duration_per_img_ms
+      << " ms per image)" << std::endl;
+}
+
+
+
+classifiers will be saved as classifier_01/cascade.xml   stage,  param files.
