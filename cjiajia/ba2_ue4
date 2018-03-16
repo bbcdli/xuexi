@@ -1,0 +1,1104 @@
+#include "ue4_kNearestNeighbor.h"
+
+#include <iostream>
+#include <map>
+
+#include <opencv2/opencv.hpp>
+
+//cv::PCA pca;
+//
+//// constructor
+//ue4_kNearestNeighbor::ue4_kNearestNeighbor()
+//{
+//}
+//
+//// destructor
+//ue4_kNearestNeighbor::~ue4_kNearestNeighbor()
+//{
+//}
+//
+//// training method
+//void ue4_kNearestNeighbor::train(std::vector<std::vector<float>> positives,
+//    std::vector<std::vector<float>> negatives)
+//{
+//  cv::Mat data = cv::Mat(positives.size() + negatives.size(),
+//      positives[0].size(), CV_64FC1);
+//  for (int row = 0; row < data.rows; row++)
+//  {
+//    for (int col = 0; col < data.cols; col++)
+//    {
+//      if (row < (int) positives.size())
+//      {
+//        data.at<double>(row, col) = positives[row][col];
+//      }
+//      else
+//      {
+//        data.at<double>(row, col) = negatives[row - positives.size()][col];
+//      }
+//    }
+//  }
+//
+//  pca(data, cv::Mat(), CV_PCA_DATA_AS_ROW, 5);
+//
+//  for (unsigned int i = 0; i < positives.size(); i++)
+//  {
+//    this->positves.push_back(pca.project(positives[i]));
+//  }
+//  for (unsigned int i = 0; i < negatives.size(); i++)
+//  {
+//    this->negatives.push_back(pca.project(negatives[i]));
+//  }
+//}
+//
+//// prediction - true if sample is classified as positive, else false
+//// parameter k is number of relevant neighbors
+//bool ue4_kNearestNeighbor::predict(std::vector<float> sample, unsigned int k, int threshold)
+//{
+//  if (k % 2 == 0)
+//  {
+//    std::cerr << "ue4_kNearestNeighbor::predict ERROR: k must be odd"
+//        << std::endl;
+//    return false;
+//  }
+//
+//  sample = pca.project(sample);
+//
+//  std::map<float, std::vector<float>> nearestPositives;
+//  std::map<float, std::vector<float>> nearestNegatives;
+//
+//  std::vector<std::vector<float>>::iterator iter;
+//  for (iter = positves.begin(); iter != positves.end(); iter++)
+//  {
+//    float dist = calcDistance(*iter, sample);
+//    nearestPositives[dist] = *iter;
+//  }
+//
+//  for (iter = negatives.begin(); iter != negatives.end(); iter++)
+//  {
+//    float dist = calcDistance(*iter, sample);
+//    nearestNegatives[dist] = *iter;
+//  }
+//
+//  unsigned int posCounter = 0;
+//  unsigned int negCounter = 0;
+//  for (unsigned int key = 0; key < k; key++)
+//  {
+//    if (nearestPositives.begin()->first < nearestNegatives.begin()->first)
+//    {
+//      posCounter++;
+//      nearestPositives.erase(nearestPositives.begin(),
+//          ++nearestPositives.begin());
+//    }
+//    else
+//    {
+//      negCounter++;
+//      nearestNegatives.erase(nearestNegatives.begin(),
+//          ++nearestNegatives.begin());
+//    }
+//  }
+//
+//  return posCounter + threshold > negCounter;
+//}
+//
+//float ue4_kNearestNeighbor::calcDistance(std::vector<float>& feature1,
+//    std::vector<float>& feature2)
+//{
+//  if (feature1.size() != feature2.size())
+//  {
+//    std::cerr
+//        << "ue4_kNearestNeighbor::calcDistance ERROR: Feature vectors have not the same size"
+//        << std::endl;
+//  }
+//
+//  float sum = 0.0f;
+//  for (unsigned int i = 0; i < feature1.size(); i++)
+//  {
+//    sum += (feature1[i] - feature2[i]) * (feature1[i] - feature2[i]);
+//  }
+//
+//  return sqrt(sum);
+//}
+
+
+
+#pragma once
+#include <vector>
+
+#include "opencv/ml.h"
+
+class ue4_kNearestNeighbor
+{
+public:
+  // constructor and destructor
+	ue4_kNearestNeighbor(){}
+	~ue4_kNearestNeighbor(){}
+
+  // declare train and predict methods
+  void train(std::vector<std::vector<float>> positives,
+	  std::vector<std::vector<float>> negatives){
+	  cv::Mat data = cv::Mat(positives.size() + negatives.size(),
+		  positives[0].size(), CV_64FC1);
+	  for (int row = 0; row < data.rows; row++)
+	  {
+		  for (int col = 0; col < data.cols; col++)
+		  {
+			  if (row < (int)positives.size())
+			  {
+				  data.at<double>(row, col) = positives[row][col];
+			  }
+			  else
+			  {
+				  data.at<double>(row, col) = negatives[row - positives.size()][col];
+			  }
+		  }
+	  }
+
+	  pca(data, cv::Mat(), CV_PCA_DATA_AS_ROW, 5);
+
+	  for (unsigned int i = 0; i < positives.size(); i++)
+	  {
+		  this->positves.push_back(pca.project(positives[i]));
+	  }
+	  for (unsigned int i = 0; i < negatives.size(); i++)
+	  {
+		  this->negatives.push_back(pca.project(negatives[i]));
+	  }
+  }
+
+  bool predict(std::vector<float> sample, unsigned int k, int threshold){
+	  if (k % 2 == 0)
+	  {
+		  std::cerr << "ue4_kNearestNeighbor::predict ERROR: k must be odd"
+			  << std::endl;
+		  return false;
+	  }
+
+	  sample = pca.project(sample);
+
+	  std::map<float, std::vector<float>> nearestPositives;
+	  std::map<float, std::vector<float>> nearestNegatives;
+
+	  std::vector<std::vector<float>>::iterator iter;
+	  for (iter = positves.begin(); iter != positves.end(); iter++)
+	  {
+		  float dist = calcDistance(*iter, sample);
+		  nearestPositives[dist] = *iter;
+	  }
+
+	  for (iter = negatives.begin(); iter != negatives.end(); iter++)
+	  {
+		  float dist = calcDistance(*iter, sample);
+		  nearestNegatives[dist] = *iter;
+	  }
+
+	  unsigned int posCounter = 0;
+	  unsigned int negCounter = 0;
+	  for (unsigned int key = 0; key < k; key++)
+	  {
+		  if (nearestPositives.begin()->first < nearestNegatives.begin()->first)
+		  {
+			  posCounter++;
+			  nearestPositives.erase(nearestPositives.begin(),
+				  ++nearestPositives.begin());
+		  }
+		  else
+		  {
+			  negCounter++;
+			  nearestNegatives.erase(nearestNegatives.begin(),
+				  ++nearestNegatives.begin());
+		  }
+	  }
+
+	  return posCounter + threshold > negCounter;
+  }
+
+private:
+  // declare private variables here
+  // todo
+
+//  cv::Mat samples;
+//  cv::Mat classes;
+	cv::PCA pca;
+
+  std::vector<std::vector<float>> positves;
+  std::vector<std::vector<float>> negatives;
+
+  float calcDistance(std::vector<float>& feature1,
+	  std::vector<float>& feature2){
+	  if (feature1.size() != feature2.size())
+	  {
+		  std::cerr
+			  << "ue4_kNearestNeighbor::calcDistance ERROR: Feature vectors have not the same size"
+			  << std::endl;
+	  }
+
+	  float sum = 0.0f;
+	  for (unsigned int i = 0; i < feature1.size(); i++)
+	  {
+		  sum += (feature1[i] - feature2[i]) * (feature1[i] - feature2[i]);
+	  }
+
+	  return sqrt(sum);
+  }
+};
+
+
+main.cpp
+// main.cpp
+
+#include <iostream>
+
+#include "ue_final.h"
+#include "ue4_kNearestNeighbor.h"
+
+#include "opencv2/opencv.hpp"
+
+// define category to inspect
+// one of: PROHIBITORY, MANDATORY, DANGER, ALL
+const std::vector<unsigned int> CATEGORY = PROHIBITORY;
+
+cv::CascadeClassifier sign_cascade;
+const std::string sign_cascade_name =
+    "E:/Dropbox/Dropbox/BGAII/Uebungen/UE3_Training/classifier_0_05/cascade.xml";
+
+// create optional classifier for detection improvement
+ue4_kNearestNeighbor knn;
+
+// create classifier for multi-class sign type classification
+cv::SVM SVM;
+const std::string classifier_name = "E:/Dropbox/Dropbox/BGAII/Uebungen/UE5/classifier.svm";
+
+// this method finds rois in an image and stores them into the rois vector as cv::Rect
+void detectROIs(cv::Mat image, std::vector<cv::Rect> &rois)
+{
+  // Convert to gray image
+  cv::Mat graySubImage;
+  cvtColor(image, graySubImage, CV_BGR2GRAY);
+
+  sign_cascade.detectMultiScale(graySubImage, rois, 1.03, 1,
+      0 | CV_HAAR_SCALE_IMAGE, cv::Size(15, 15), cv::Size(150, 150));
+}
+
+// classify a given set of rois (gets called by browseRecords())
+// note: result can be true or false, depending on whether the roi is expected to be a
+// traffic sign or not. so this classification part belongs to detection.
+void classifyROIs(cv::Mat image, std::vector<cv::Rect> rois,
+    std::vector<bool> &predictions)
+{
+  // for every roi
+  for (size_t i = 0; i < rois.size(); ++i)
+  {
+    // create mat and compute the features
+    cv::Mat roi(image, rois[i]);
+    std::vector<float> features;
+    computeFeatures(roi, features);
+	
+    // classify features
+    predictions.push_back(knn.predict(features, 1, 0));
+  }
+}
+
+// make a prediction on what type of sign is represented by the given features
+float predictSignType(cv::Mat features)
+{
+  return SVM.predict(features);
+}
+
+// main method
+// takes care of program flow
+int main(int argc, char* argv[])
+{
+  // read the ground truth file
+  std::cout << "[info]\treading ground truth textfile.." << std::endl;
+  std::vector<imageLabel> records;
+  const std::string GROUND_TRUTH_FILENAME = IMAGE_DIR + "gt.txt";
+  readGroundTruthFile(GROUND_TRUTH_FILENAME, records);
+  std::cout << "[info]\tread " << records.size() << " records." << std::endl;
+
+  // --- HAAR cascade ---------------------
+  // - implement your own detection algorithm (or use default detector)
+  std::cout << "[info]\tload HAAR cascade classifier for detection"
+      << std::endl;
+  if (!sign_cascade.load(sign_cascade_name))
+  {
+    std::cerr << "--(!)error loading\n";
+    return -1;
+  };
+
+  // --- KNN ------------------------------
+  // - load your knn-classifier for improvement of detection results (optional)
+  std::cout << "[info]\ttrain KNN for detection" << std::endl;
+
+  // split the records into training and validation set
+  float traingSetPercentage = 0.75;
+  int trainingIndex = (int) ceil(records.size() * traingSetPercentage);
+  std::vector<imageLabel> trainingRecords(records.begin(),
+      records.begin() + trainingIndex);
+  std::vector<imageLabel> validationRecords(records.begin() + trainingIndex,
+	   records.end());
+
+  // run detection, collect positives and negatives
+  std::vector<std::vector<float>> positives, negatives;
+  runDetectionAndOrganizeFeatures(trainingRecords, positives, negatives,
+      CATEGORY);
+
+  // then use the features to train k-nn
+  knn.train(positives, negatives);
+
+  // --- SVM ------------------------------
+  // - load your multiclass-classifier to predict the sign type
+  std::cout << "[info]\tload SVM for classification" << std::endl;
+  SVM.load(classifier_name.c_str());
+
+  // now browse validation-records and see that k-nn could improve detection
+  std::cout << "[info]\tbrowsing records.." << std::endl;
+  int key = browseImages(records, CATEGORY);
+
+  // if key 'a' was pressed, then evaluate all validationRecords as batch
+  // 'a' corresponds to 97
+  if (key == 97 || key == 1048673)
+  {
+    evaluateAllImages(validationRecords, CATEGORY);
+  }
+  cv::waitKey(0);
+  system("Pause");
+
+  return 0;
+}
+
+
+
+ue_final
+// ue4.h
+
+// makes sure this file is included only once
+#pragma once
+
+#include "opencv2/opencv.hpp"
+#include <iostream>
+#include <fstream>
+#include <chrono>
+
+// define path
+const std::string IMAGE_DIR = "D:/GTSDB/FullIJCNN2013/"; // BA 2 UE Rechner
+//const std::string IMAGE_DIR = "/home/twobeers/workspace/bga/GTSDB/"; // BA 2 UE Rechner
+//const std::string IMAGE_DIR = "E:/traffic_sign_db/train/"; // m.r
+
+// create categories of traffic signs
+const std::vector<unsigned int> PROHIBITORY = { 0, 1, 2, 3, 4, 5, 7, 8, 9, 10,
+    15, 16 };
+const std::vector<unsigned int> MANDATORY = { 33, 34, 35, 36, 37, 38, 39, 40 };
+const std::vector<unsigned int> DANGER = { 11, 18, 19, 20, 21, 22, 23, 24, 25,
+    26, 27, 28, 29, 30, 31 };
+const std::vector<unsigned int> ALL;
+
+// create hog descriptor
+const cv::Size WIN_SIZE(32, 32);
+const cv::HOGDescriptor UE4_HOG(WIN_SIZE, cv::Size(8, 8), cv::Size(4, 4),
+    cv::Size(4, 4), 8);
+
+// define data structures
+struct labeledROI
+{
+  cv::Rect roi;
+  unsigned int classID;
+};
+
+struct imageLabel
+{
+  std::string filename;
+  std::vector<labeledROI> rois;
+};
+
+// this method is suitable for splitting a string into a vector of substrings, divided by a delimiter character
+// source: http://stackoverflow.com/questions/236129/split-a-string-in-c
+// usage: create a vector of strings, then call split(string, delimiter, vector);
+std::vector<std::string> &split(const std::string &s, char delim,
+    std::vector<std::string> &elems)
+{
+  std::stringstream ss(s);
+  std::string item;
+  while (std::getline(ss, item, delim))
+  {
+    elems.push_back(item);
+  }
+  return elems;
+}
+
+// this method reads the ground truth file
+// it puts all data into the labels-vector
+void readGroundTruthFile(const std::string filename,
+    std::vector<imageLabel> &records)
+{
+  // open ground truth file
+  std::ifstream gtFile(filename);
+
+  while (gtFile.good())
+  {
+    // read record (whole line)
+    std::string tmp;
+    std::getline(gtFile, tmp);
+
+    // split line into elements
+    std::vector<std::string> strings;
+    split(tmp, ';', strings);
+
+    // simple check
+    if (strings.size() != 6)
+    {
+      std::cout << "ALERT: number of elements is not 6, instead: "
+          << strings.size() << std::endl;
+//			std::cout << "stopping to read file." << std::endl;
+      continue;
+    }
+
+    // write roi elements into roi record
+    labeledROI record;
+
+    cv::Rect rect;
+    rect.x = std::stoul(strings[1]); // leftcol
+    rect.y = std::stoul(strings[2]); // toprow
+    rect.width = std::stoul(strings[3]) - rect.x; // rightcol - leftcol
+    rect.height = std::stoul(strings[4]) - rect.y; // bottomrow - toprow
+    record.roi = rect;
+    record.classID = std::stoul(strings[5]); // classid
+
+    // check if new imagelabel has to be created
+    if (records.empty() || records.back().filename != strings[0])
+    {
+      imageLabel label;
+      label.filename = strings[0];
+      records.push_back(label);
+    }
+
+    // push roi to last imagelabel
+    records.back().rois.push_back(record);
+  }
+}
+
+// check if classID is relevant
+// i.e. return true if vector is empty or classID is contained in the vector
+bool isClassRelevant(const std::vector<unsigned int> relevantClasses,
+    const unsigned int classID)
+{
+  return (relevantClasses.empty()
+      || (std::find(relevantClasses.begin(), relevantClasses.end(), classID)
+          != relevantClasses.end()));
+}
+
+// predeclaration of method
+// this method finds rois in an image and stores them into the rois vector as cv::Rect
+void detectROIs(cv::Mat image, std::vector<cv::Rect> &rois);
+
+// this is a default detection routine based on hough circle transform
+// it achieves precision of 50% with a recall of 26% for the mandatory signs of the training set
+// use it if you don't have a useful detection method
+void defaultDetector(cv::Mat image, std::vector<cv::Rect> &rois)
+{
+  // do awesome traffic sign detection stuff
+  cv::cvtColor(image, image, cv::COLOR_BGR2GRAY);
+  cv::GaussianBlur(image, image, cv::Size(9, 9), 2, 2);
+  std::vector<cv::Vec3f> circles;
+  cv::HoughCircles(image, circles, CV_HOUGH_GRADIENT, 1, 15, 100, 45, 5, 60);
+
+  // convert to rectangles
+  for (size_t i = 0; i < circles.size(); ++i)
+  {
+    float x, y, r;
+    x = circles[i][0];
+    y = circles[i][1];
+    r = circles[i][2];
+
+    // also scale the rects a little bit, so they contain the whole sign with a bit margin
+    cv::Rect roi;
+    const double SCALE = 1.25;
+    roi.x = int(x - SCALE * r);
+    roi.y = int(y - SCALE * r);
+    roi.width = int(2 * SCALE * r);
+    roi.height = int(2 * SCALE * r);
+
+    // make sure the rectangles do not exceed the image bounds
+    roi.x = MAX(0, roi.x);
+    roi.y = MAX(0, roi.y);
+    roi.width = MIN(image.size().width - roi.x, roi.width);
+    roi.height = MIN(image.size().height - roi.y, roi.height);
+
+    rois.push_back(roi);
+  }
+}
+
+// predeclarations
+void classifyROIs(cv::Mat image, std::vector<cv::Rect> rois,
+    std::vector<bool> &predictions);
+float predictSignType(cv::Mat features);
+
+// compute the hog features for a roi
+void computeFeatures(cv::Mat roi, std::vector<float> &features)
+{
+  cv::resize(roi, roi, WIN_SIZE);
+  UE4_HOG.compute(roi, features);
+}
+
+// jaccard similarity coefficient
+// overlap/covered area, in range [0,1]
+const double jaccardScore(const cv::Rect roi1, const cv::Rect roi2)
+{
+  return 1. * (roi1 & roi2).area() / (roi1 | roi2).area();
+}
+
+// runs detection and stores features in positive and negative vector
+void runDetectionAndOrganizeFeatures(const std::vector<imageLabel> records,
+    std::vector<std::vector<float>> &positives,
+    std::vector<std::vector<float>> &negatives,
+    const std::vector<unsigned int> relevantClasses =
+        std::vector<unsigned int>())
+{
+  std::cout << "% -> ";
+  int perc = records.size() * 5 / 100;
+  // for all images
+  for (size_t i = 0; i < records.size(); ++i)
+  {
+    /*if (i % perc == 0)
+    {
+      std::cout << (5 * i / perc) << "...";
+      std::cout.flush();
+    }*/
+    // retrieve record and read image
+    imageLabel record = records[i];
+    cv::Mat image;
+    image = cv::imread(IMAGE_DIR + record.filename);
+
+    // detect rois
+    std::vector<cv::Rect> detected_rois;
+    detectROIs(image, detected_rois);
+
+    // get relevant labels into vector
+    std::vector<cv::Rect> labelROIs;
+    for (size_t i = 0; i < record.rois.size(); ++i)
+    {
+      if (isClassRelevant(relevantClasses, record.rois[i].classID))
+      {
+        labelROIs.push_back(record.rois[i].roi);
+      }
+    }
+
+    // for every roi, check if is positive or negative
+    // append features to according list
+    for (size_t k = 0; k < detected_rois.size(); ++k)
+    {
+      // compare to all label rois
+      bool positive = false;
+      for (size_t j = 0; j < labelROIs.size(); ++j)
+      {
+        if (jaccardScore(detected_rois[k], labelROIs[j]) >= 0.6)
+        {
+          positive = true;
+          break;
+        }
+      }
+
+      // compute the features
+      cv::Mat roi(image, detected_rois[k]);
+      std::vector<float> descriptors;
+      computeFeatures(roi, descriptors);
+
+      // append to vector
+      if (positive)
+      {
+        positives.push_back(descriptors);
+      }
+      else
+      {
+        negatives.push_back(descriptors);
+      }
+    }
+  }
+  std::cout << std::endl;
+}
+
+void evaluateDetection(const std::vector<labeledROI> labelROIs,
+    const std::vector<cv::Rect> detectedROIs, unsigned int &tp,
+	unsigned int &fp, unsigned int &fn, unsigned int &cc, unsigned int &ncc, cv::Mat image, bool state)
+{
+  /*
+   if jaccard similarity >= 0.6, the detected roi is a hit.
+   if more than one submitted roi intersects a ground-truth roi with a jaccard >= 0.6,
+   the one with maximum value is used, the others are ignored, i.e., they neither count as hit nor miss.
+
+   so, algorithm works this way:
+   - for each labeled roi:
+   - compute jaccard similarity to all detected rois
+   - check if max value >= 0.6, then increase tp, if not, increase fn
+   - also remember max similarity value for each detected roi
+   - for each detected roi with max similarity < 0.6, increase fp
+   */
+
+  const double SIMILARITY_THRESHOLD = 0.6;
+
+  // create and initialize similarities vector to remember max values for each detected roi
+  std::vector<double> similarities;
+  for (size_t i = 0; i < detectedROIs.size(); ++i)
+  {
+    similarities.push_back(0);
+  }
+
+  // for each labelROI
+  for (size_t i = 0; i < labelROIs.size(); ++i)
+  {
+    // compute similarity to all detected rois, remember max
+    double max_similarity = 0;
+	int max_similarity_index = 0;
+	int index = 0;
+    for (size_t j = 0; j < detectedROIs.size(); ++j)
+    {
+      double similarity = jaccardScore(labelROIs[i].roi, detectedROIs[j]);
+
+      // remember max sim for detected roi
+      if (similarities[j] < similarity)
+        similarities[j] = similarity;
+
+      // remember max sim for label roi
+	  if (max_similarity < similarity)
+	  {
+		  max_similarity = similarity;
+		  max_similarity_index = j;
+		  index = i;
+	  }
+    }
+
+    //std::cout << "[debug]\tlabelroi " << i << ", max similarity: " << max_similarity << std::endl;
+
+    // if max similarity >= 0.6, we have a true positive, else it is a false negative
+	if (max_similarity >= SIMILARITY_THRESHOLD)
+	{
+		tp++;
+
+		if (state){
+			cv::Mat roi(image, detectedROIs[max_similarity_index]);
+			std::vector<float> featureVec;
+			computeFeatures(roi, featureVec);
+			cv::Mat featureMat(featureVec, false);
+			if (predictSignType(featureMat) == labelROIs[index].classID)
+				cc++;
+			else
+				ncc++;
+		}
+	}
+      
+    else
+      fn++;
+  }
+
+  // for each detected roi with max similarity < 0.6, increase fp
+  for (size_t i = 0; i < similarities.size(); ++i)
+  {
+    if (similarities[i] < SIMILARITY_THRESHOLD)
+      fp++;
+  }
+
+}
+
+// this method runs through all records and evaluates the whole set
+// it also measures the time to run through the set
+void evaluateAllImages(const std::vector<imageLabel> records,
+    const std::vector<unsigned int> relevantClasses =
+        std::vector<unsigned int>())
+{
+  std::cout << std::endl;
+  std::cout << "[info]\t*** processing all images of given dataset ***"
+      << std::endl;
+
+  unsigned int fp = 0, tp = 0, fn = 0;
+  unsigned int fp2 = 0, tp2 = 0, fn2 = 0, tn2 = 0;
+  unsigned int cc = 0, ncc = 0;
+
+  std::cout << "% -> ";
+  int perc = records.size() * 5 / 100;
+
+  // accumulate duration of detection algorithm
+  std::chrono::microseconds duration(0);
+
+  // for each record
+  for (size_t i = 0; i < records.size(); ++i)
+  {
+    /*if (i % perc == 0)
+    {
+      std::cout << (5 * i / perc) << "...";
+      std::cout.flush();
+    }*/
+    // extract labelRects
+    //std::vector<cv::Rect> labelROIs;
+	std::vector<labeledROI> labelROIs;
+    for (size_t j = 0; j < records[i].rois.size(); ++j)
+    {
+      if (isClassRelevant(relevantClasses, records[i].rois[j].classID))
+      {
+        //labelROIs.push_back(records[i].rois[j].roi);
+		  labelROIs.push_back(records[i].rois[j]);
+      }
+    }
+
+    // detect ROIs and measure time (and classify also)
+    cv::Mat image;
+    std::vector<cv::Rect> detected_rois;
+    std::vector<bool> predictions;
+    image = cv::imread(IMAGE_DIR + records[i].filename);
+
+    std::chrono::high_resolution_clock::time_point t1 =
+        std::chrono::high_resolution_clock::now();
+    detectROIs(image, detected_rois);
+    classifyROIs(image, detected_rois, predictions);
+	//for (unsigned int i = 0; i < predictions.size(); i++){
+	//	if (predictions[i]){
+	//		cv::Mat roi(image, detected_rois[i]);
+	//		std::vector<float> featureVec;
+	//		computeFeatures(roi, featureVec);
+	//		cv::Mat featureMat(featureVec, false);
+	//		predictSignType(featureMat);
+	//	}
+	//}
+    std::chrono::high_resolution_clock::time_point t2 =
+        std::chrono::high_resolution_clock::now();
+    duration += std::chrono::duration_cast < std::chrono::microseconds
+        > (t2 - t1);
+
+    // evaluate
+    evaluateDetection(labelROIs, detected_rois, tp, fp, fn, cc, ncc, image, false);
+
+    // also, separately evaluate re-checked rois as vector
+    std::vector<cv::Rect> classifiedROIs;
+    for (size_t i = 0; i < detected_rois.size(); ++i)
+    {
+      if (predictions[i])
+        classifiedROIs.push_back(detected_rois[i]);
+    }
+    evaluateDetection(labelROIs, classifiedROIs, tp2, fp2, fn2, cc, ncc, image, true);
+  }
+  std::cout << std::endl;
+
+  // show evaluation results
+  std::cout << "[info]\tresults - detector only:" << std::endl;
+  std::cout << "  number of detections:\t" << tp + fp << std::endl;
+  std::cout << "  true positives:\t" << tp << std::endl;
+  std::cout << "  false positives:\t" << fp << std::endl;
+  std::cout << "  false negatives:\t" << fn << std::endl;
+
+  if (tp + fp > 0)
+    std::cout << "  precision:\t" << 1. * tp / (tp + fp) << std::endl;
+  else
+    std::cout << "  precision:\t#undef" << std::endl;
+
+  if (tp + fn > 0)
+    std::cout << "  recall:\t" << 1. * tp / (tp + fn) << std::endl;
+  else
+    std::cout << "  recall:\t#undef" << std::endl;
+
+  std::cout << "[info]\tresults - detector + classifier:" << std::endl;
+  std::cout << "  number of detections:\t" << tp2 + fp2 << std::endl;
+  std::cout << "  true positives:\t" << tp2 << std::endl;
+  std::cout << "  false positives:\t" << fp2 << std::endl;
+  std::cout << "  false negatives:\t" << fn2 << std::endl;
+
+  if (tp2 + fp2 > 0)
+    std::cout << "  precision:\t" << 1. * tp2 / (tp2 + fp2) << std::endl;
+  else
+    std::cout << "  precision:\t#undef" << std::endl;
+
+  if (tp2 + fn2 > 0)
+    std::cout << "  recall:\t" << 1. * tp2 / (tp2 + fn2) << std::endl;
+  else
+    std::cout << "  recall:\t#undef" << std::endl;
+
+  // now check what difference the classifier made
+  // count how many rois were sorted out (these are classified as negative)
+  unsigned int classifiedAsNegative = tp + fp + fn - tp2 - fp2 - fn2;
+
+  // count how many of them were correctly classified as negatives (true negative)
+  tn2 = fp - fp2;
+  std::cout << "[info]\tresults - kNN classifier only:" << std::endl;
+  std::cout << "  ccr: \t" << 1. * (tp2 + tn2) / (tp + fp) << std::endl;
+  std::cout << "  number of samples:\t" << tp + fp << std::endl;
+  std::cout << "  correctly classified:\t" << tp2 + tn2 << std::endl;
+
+  if (tn2 + fp2 > 0)
+    std::cout << "  false positive rate:\t" << 1. * fp2 / (fp2 + tn2)
+        << std::endl;
+  else
+    std::cout << "  false positive rate:\t#undef" << std::endl;
+
+  if (tp2 + fn2 - fn > 0)
+    std::cout << "  true positive rate:\t" << 1. * tp2 / (tp2 + fn2 - fn)
+        << std::endl;
+  else
+    std::cout << "  true positive rate:\t#undef" << std::endl;
+
+  std::cout << "[info]\tresults - SVM classifier only:" << std::endl;
+  std::cout << "correct classified:\t" << cc << std::endl;
+  std::cout << "not correct classified:\t" << ncc << std::endl;
+  std::cout << "ccr:\t" << (float) cc / (float) (cc + ncc) << std::endl;
+
+
+  // show time results
+  auto duration_all_ms = std::chrono::duration_cast < std::chrono::milliseconds
+      > (duration).count();
+  double duration_per_img_ms = 1. * duration_all_ms / records.size();
+  std::cout << "  " << duration_all_ms << " ms for " << records.size()
+      << " images (that's a mean value of " << duration_per_img_ms
+      << " ms per image)" << std::endl;
+}
+
+// this method browses all images and detects ROIs on the fly
+int browseImages(const std::vector<imageLabel> records,
+    const std::vector<unsigned int> relevantClasses =
+        std::vector<unsigned int>())
+{
+  // return if vector is empty
+  if (records.empty())
+  {
+    std::cout << "vector is empty. cannot browse images." << std::endl;
+    return 0;
+  }
+
+  unsigned int index = 0;
+  bool loopActive = true;
+
+  // browsing loop
+  while (loopActive)
+  {
+    std::cout << "[info]\trecord index: " << index << std::endl;
+
+    // retrieve record and read image
+    imageLabel record = records[index];
+    cv::Mat image;
+    image = cv::imread(IMAGE_DIR + record.filename);
+
+    // detect rois
+    std::vector<cv::Rect> detected_rois;
+    detectROIs(image, detected_rois);
+
+    // re-check the detected rois
+    std::vector<bool> predictions;
+    classifyROIs(image, detected_rois, predictions);
+
+    // predict the sign types
+    std::vector<int> signTypes;
+    for (unsigned int k = 0; k < predictions.size(); k++)
+    {
+      // compute only if prediction says that it is a sign
+      if (predictions[k])
+      {
+        // generate submat
+        cv::Mat my_roi(image, detected_rois[k]);
+        std::vector<float> features_vec;
+        computeFeatures(my_roi, features_vec);
+        cv::Mat features_mat(features_vec, false);
+        signTypes.push_back(predictSignType(features_mat));
+      }
+      else
+      {
+        signTypes.push_back(-1);
+      }
+    }
+
+    /*** begin of drawing part ***/
+    // initialize drawing helpers
+    const cv::Scalar GREEN(0, 255, 0);
+    const cv::Scalar RED(0, 0, 255);
+    const cv::Scalar BLUE(255, 0, 0);
+    const double FONT_SCALE = 1.5;
+    const int THICKNESS = 3;
+
+    // draw labeled rois
+    for (size_t i = 0; i < record.rois.size(); ++i)
+    {
+      labeledROI roi_label = record.rois[i];
+
+      // check if roi should be displayed
+      // will be displayed if relevantClasses vector is empty, or if classID is contained in relevantClasses
+      if (isClassRelevant(relevantClasses, roi_label.classID))
+      {
+        // create relevant points
+        cv::Rect rect = roi_label.roi;
+        cv::Point org = roi_label.roi.br();
+        org.x += 10;
+
+        // draw rectangle
+        cv::rectangle(image, roi_label.roi, GREEN, THICKNESS);
+
+        // draw class ID
+        std::string class_str = std::to_string(roi_label.classID);
+        cv::putText(image, class_str, org, CV_FONT_HERSHEY_PLAIN, FONT_SCALE,
+            GREEN, THICKNESS);
+      }
+    }
+
+    // draw detected rois that have been confirmed by knn-classifier
+    for (size_t i = 0; i < detected_rois.size(); ++i)
+    {
+      if (predictions[i])
+      {
+        cv::rectangle(image, detected_rois[i], RED, THICKNESS);
+
+        cv::Point org = detected_rois[i].br();
+        org.x += 10;
+        org.y -= 30;
+
+        // draw predicted class ID
+        std::string class_str = std::to_string(signTypes[i]);
+        cv::putText(image, class_str, org, CV_FONT_HERSHEY_PLAIN, FONT_SCALE,
+            RED, THICKNESS);
+      }
+
+    }
+
+    // create a window with name "Display" and show the image
+    const std::string WINDOW_1 = "Display";
+    cv::namedWindow(WINDOW_1, CV_WINDOW_AUTOSIZE);
+    //cv::moveWindow(WINDOW_1, 20, 20);
+    cv::imshow(WINDOW_1, image);
+
+    /*** end of drawing part ***/
+
+    /*** begin of evaluation part ***/
+    // for evaluation, we need to write all relevant Rects to a vector
+    std::vector<labeledROI> labelROIs;
+    for (size_t i = 0; i < record.rois.size(); ++i)
+    {
+      if (isClassRelevant(relevantClasses, record.rois[i].classID))
+      {
+        labelROIs.push_back(record.rois[i]);
+      }
+    }
+
+    // also, separately use re-checked rois as vector
+    std::vector<cv::Rect> classifiedROIs;
+    for (size_t i = 0; i < detected_rois.size(); ++i)
+    {
+      if (predictions[i])
+        classifiedROIs.push_back(detected_rois[i]);
+    }
+
+    // now we can compute fp, tp, fn; (compute precision and recall)
+	unsigned int fp = 0, tp = 0, fn = 0;
+	unsigned int cc = 0, ncc = 0;
+    evaluateDetection(labelROIs, detected_rois, tp, fp, fn, cc, ncc, image, false);
+
+    std::cout << "[info]\tevaluating image - DETECTOR ONLY:" << std::endl;
+    std::cout << "  true positives:\t" << tp << std::endl;
+    std::cout << "  false positives:\t" << fp << std::endl;
+    std::cout << "  false negatives:\t" << fn << std::endl;
+
+    if (tp + fp > 0)
+      std::cout << "  precision:\t" << 1. * tp / (tp + fp) << std::endl;
+    else
+      std::cout << "  precision:\t#undef" << std::endl;
+
+    if (tp + fn > 0)
+      std::cout << "  recall:\t" << 1. * tp / (tp + fn) << std::endl;
+    else
+      std::cout << "  recall:\t#undef" << std::endl;
+
+    unsigned int fp2 = 0, tp2 = 0, fn2 = 0;
+	cc = 0;
+	ncc = 0;
+    evaluateDetection(labelROIs, classifiedROIs, tp2, fp2, fn2, cc, ncc, image, true);
+
+    std::cout << "[info]\tevaluating image - DETECTOR + CLASSIFIER:"
+        << std::endl;
+    std::cout << "  true positives:\t" << tp2 << std::endl;
+    std::cout << "  false positives:\t" << fp2 << std::endl;
+    std::cout << "  false negatives:\t" << fn2 << std::endl;
+
+    if (tp2 + fp2 > 0)
+      std::cout << "  precision:\t" << 1. * tp2 / (tp2 + fp2) << std::endl;
+    else
+      std::cout << "  precision:\t#undef" << std::endl;
+
+    if (tp2 + fn2 > 0)
+      std::cout << "  recall:\t" << 1. * tp2 / (tp2 + fn2) << std::endl;
+    else
+      std::cout << "  recall:\t#undef" << std::endl;
+
+    // now check what difference the classifier made
+    // count how many rois were sorted out (these are classified as negative)
+    unsigned int classifiedAsNegative = tp + fp + fn - tp2 - fp2 - fn2;
+
+    // count how many of them were correctly classified as negatives (true negative)
+    unsigned int tn2 = fp - fp2;
+    std::cout << "[info]\tevaluating image - kNN CLASSIFIER ONLY:" << std::endl;
+    std::cout << "  number of rejections:\t" << classifiedAsNegative
+        << std::endl;
+    std::cout << "  correct rejections:\t" << tn2 << std::endl;
+
+    if (tn2 + fp2 > 0)
+      std::cout << "  false positive rate:\t" << 1. * fp2 / (fp2 + tn2)
+          << std::endl;
+    else
+      std::cout << "  false positive rate:\t#undef" << std::endl;
+
+    if (tp2 + fn2 > 0)
+      std::cout << "  true positive rate:\t" << 1. * tp2 / (tp2 + fn2)
+          << std::endl;
+    else
+      std::cout << "  true positive rate:\t#undef" << std::endl;
+
+	std::cout << "[info]\tresults - SVM classifier only:" << std::endl;
+	std::cout << "correct classified:\t" << cc << std::endl;
+	std::cout << "not correct classified:\t" << ncc << std::endl;
+	std::cout << "ccr:\t" << (float)cc / (float)(cc + ncc) << std::endl;
+
+    /*** end of evaluation part ***/
+
+    /*** begin of user interface/navigation ***/
+    // wait for user action
+    int key = cv::waitKey(0);
+
+    // depending on the user input, show next/previous image or exit loop
+    switch (key)
+    {
+      // right key: 2555904, increase index, handle overflow
+      case 2555904:
+      case 1113939:
+        if (index >= records.size() - 1)
+        {
+          index = 0;
+        }
+        else
+        {
+          index++;
+        }
+        break;
+        // left key: 2424832, decrease index, handle overflow
+      case 2424832:
+      case 1113937:
+        if (index <= 0)
+        {
+          index = records.size() - 1;
+        }
+        else
+        {
+          index--;
+        }
+        break;
+        // other key, exit browsing loop
+      default:
+        // close all windows and return key
+        std::cout << "key pressed: " << key << std::endl;
+        cv::destroyAllWindows();
+        return key;
+    }
+  }
+  return 0;
+}
+
+
+
+main.h.in
+/* 
+ * CAUTION: This file is generated by CMake.
+ * Do not modify this file, since any modifications will be lost.
+ */
+
+#define UE1_VERSION_MAJOR @UE1_VERSION_MAJOR@
+#define UE1_VERSION_MINOR @UE1_VERSION_MINOR@
+
