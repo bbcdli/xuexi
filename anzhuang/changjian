@@ -1,3 +1,9 @@
+git branch -a
+git status
+git add .
+git commit -m ''
+git push branchName
+
 #add user to docker folder permission
 sudo chown "$USER":"$USER" /home/"$USER"/.docker -R
 sudo chmod g+rwx "/home/$USER/.docker" -R
