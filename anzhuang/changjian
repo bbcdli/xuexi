@@ -1,8 +1,10 @@
 git branch -a
 git status
+git pull
 git add .
 git commit -m ''
-git push branchName
+git pull  #better check again
+git push   #if push to master (jia li shi de), bu yong xie master, bu zhi dao gai bu gai yong branch name
 
 #add user to docker folder permission
 sudo chown "$USER":"$USER" /home/"$USER"/.docker -R
