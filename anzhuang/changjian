@@ -14,6 +14,10 @@ sudo chown -R $USER:$USER local_folder #when denied
 if imutil cannot be imported, just install it using 
 $ pip install imutils
 
+install Qt4 for graphical app,(for s_label)
+$ sudo apt-get install python-qt4
+$ sudo apt-get install python-lxml
+
 in shell use ${PWD} or `pwd` to get current directory path
 
 #print restricted length of string, use :.6 to print total 6 characters

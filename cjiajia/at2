@@ -1,0 +1,1854 @@
+main
+
+/*
+TODO Get coordinate from Image
+- convert source to HSV
+- range the color of the orange marker
+- get center of orange area
+*/
+
+/*
+TODO Klasse f黵 Steuerbefehle zur Linearachse. Diese Klasse muss enthalten:
+- getPosition() soll die Position des Schlittens der Linearachse ausgeben in [mm]
+- moveToPosition(int x) soll den Schlitten an die angegebene x-Position bewegen
+int x = [mm]
+- moveWithVelocity(int v) soll den Schlitten mit der angegebenen Geschwindigkeit bewegen (bis zur Endlage, wenn kein anderes Kommando kommt)
+int v = [mm/s]
+- moveWithAcelleration(int a) soll den Schlitten mit der angegeben Beschleunigung bewegen (bis zur Endlage, wenn kein anderes Kommando kommt)
+int a = [mm/s瞉
+*/
+
+
+
+#define _CRT_SECURE_NO_WARNINGS
+#include <cstdio>
+#include <opencv2\opencv.hpp>
+#include "opencv\cv.h"
+#include "VimbaCPP\Include\VimbaCPP.h"
+#include <fstream>
+//#include <chrono>
+#include <time.h>
+
+#include <conio.h>
+#include <ctype.h>
+
+
+// Project code headers
+#include "MyFrameObserver.h"
+#include "PowerCubeControl.h"
+
+#define pendelmove 1
+
+using namespace std;
+using namespace AVT::VmbAPI;
+
+
+//Einstellungen f黵 die Kamera
+const char* macadresse = "DEV_000F3101A0D2"; //ID der verwendeten Kamera (bei uns wird immer die im Versuchaufbau verbaute Kamera angeprochen)
+int height = 92; //Bildh鰄e in Pixeln
+//int width = 100;
+//int offset_y = 457; //Wievielte Zeile des Kamerasensors ist die erste des Bildes? hier immer einen Streifen aus der Bildmitte, um Verzerrungen zu vermeiden
+int offset_y = (960 - height) / 2;
+//int offset_x = (1280 - width) / 2;
+
+float exposuretime = 10000; //Belichtungszeit in ms  //5000 38000
+const char* pxFormat = "BGR8Packed"; //Pixelformat hier: BGR 8-Bit pro Farbe pro Pixel
+int framebuffersize = 1; //
+
+#if(Trackbar_ON==1)
+boolean showimages = true; // 
+#else
+boolean showimages = false;
+#endif
+
+cv::Mat framePtr2Mat(FramePtr pFrame)
+{
+	VmbUchar_t *pImage = NULL;
+	VmbUint32_t fHeight, fWidth;
+	unsigned char* pCurSrc;
+	VmbErrorType err;
+	//Converting FramePtr into cv::Mat
+	err = pFrame->GetImage(pImage);
+	err = pFrame->GetHeight(fHeight);
+	err = pFrame->GetWidth(fWidth);
+	pCurSrc = (unsigned char*)pImage;	
+
+#if(INFO_LEVEL_0 == 1)
+	cout << "Bildh鰄e: " << fHeight << endl;
+	cout << "Bildbreite: " << fWidth << endl;
+#endif
+	cv::Mat ret = cv::Mat(fHeight, fWidth, CV_8UC3, pCurSrc, (fWidth)* 3);
+
+	return ret;
+}
+
+
+int main(int argc, char *argv[])
+{
+
+	PowerCubeControl pCtrl(6);
+	int ans=pCtrl.iniPowerCube();
+	cout << "ans;" << ans << endl;
+	system("PAUSE");	
+	float currPos = pCtrl.getXPos();
+	//offset_x = currPos;
+	cout << "current linear achse Xpos; " << currPos << endl;
+
+#if(Trackbar_ON==0)
+
+	currPos=pCtrl.getXPos();
+	if (currPos > 0.2)
+	{
+		pCtrl.moveLeft();
+		system("PAUSE");
+		pCtrl.moveRightToMiddlePos();
+	}
+	else
+	pCtrl.moveRightToMiddlePos();
+#endif
+
+	VmbErrorType err;
+	VimbaSystem &sys = VimbaSystem::GetInstance();
+
+	VmbVersionInfo_t version;
+	VmbErrorType error = sys.QueryVersion(version);
+
+#if(INFO_LEVEL_3_ON == 1)
+	cout << "OpenCV Version " << CV_VERSION << endl;
+	cout << "Vimba C++ API Version " << version.major << "." << version.minor << "." << version.patch << endl;
+#endif
+	CameraPtr camera;
+	
+	err = sys.Startup();
+	FeaturePtr pFeature;
+
+
+DEBUG(
+	if (err == VmbErrorSuccess)
+		cout << "VmbErrorSuccess" << endl;
+	else
+		cout << "Anderer Fehler!" << endl;
+);
+
+
+	string name;
+	string id;
+	
+	//Verbindung zu Kamera mit angegebener MAC-Adresse aufbauen
+	//cout << macadresse << " - " << pMacadresse << endl;
+	err = sys.OpenCameraByID(macadresse, VmbAccessModeFull, camera);
+
+	if (err == VmbErrorSuccess)
+	{
+
+		clock_t start, end;
+		start = clock();
+		end = clock();
+		
+		//Einstellungen f黵 die Kamera vornehmen
+		//PixelFormat festlegen
+		err = camera->GetFeatureByName("PixelFormat", pFeature);
+		err = pFeature->SetValue(pxFormat);
+
+		//Bildh鰄e festlegen
+		err = camera->GetFeatureByName("Height", pFeature);
+		int temp_height = 92;
+		err = pFeature->SetValue(temp_height);
+
+		//err = camera->GetFeatureByName("Height", pFeature);
+		//err = pFeature->SetValue(height);
+
+		//////hy:
+		//////set image width
+		//err = camera->GetFeatureByName("Width", pFeature);
+		//err = pFeature->SetValue(width);
+
+		//OffsetY festlegen
+		err = camera->GetFeatureByName("OffsetY", pFeature);
+		err = pFeature->SetValue(offset_y);
+
+		////hy: set image Offset for X
+		//offset_x = pCtrl.getXPos();
+		//err = camera->GetFeatureByName("OffsetX", pFeature);
+		//err = pFeature->SetValue(offset_x);
+
+		//Belichtungszeit feslegen
+		err = camera->GetFeatureByName("ExposureTimeAbs", pFeature);
+		err = pFeature->SetValue(exposuretime);
+	
+
+#if(Trackbar_ON==0)
+		//hy: for calibration
+		cv::Mat source;
+		FramePtr pFrame;
+		int tempX1;
+		int tempX2;				
+		bool pbreak = false;
+		while (pbreak == false)
+		{			
+			
+			//Taking a Frame with the camera --> FramePtr
+			camera->AcquireSingleImage(pFrame, 100);
+			source = framePtr2Mat(pFrame);
+
+			//Show cv::Mat			
+			cv::imshow("erstes Bild", source);			
+			cv::waitKey(1);
+			int key = _getch();
+			cout << "Press ENTER, you can get current angle and positions." << endl;
+			cout << "Make sure the camera can meansure correctly" << endl;
+			CoordinateAngle ca(source, pCtrl);
+			ca.detectPendulumPtrAngleCP_cali();
+			
+
+#if(GetDetY_ON == 1)
+			float temp = ca.detectPendulumPtrAngleCP_cali();
+			cout << "Put the pendulum at left position <- to measure -30 degree, if ok, press 1" << endl;
+			cout <<  "Put the pendulum at upright to measure 0 degree, if ok, press 2" << endl;
+			
+			if (key == '1')  {
+				tempX1=temp;				
+			}
+			if (key == '2')  {
+				tempX2=temp;
+			}
+			//press s, save detX to start calc detY
+			if (key == 's')  {
+				ca.calcPCubeImgDetY(tempX1-tempX2);				
+			}
+#endif
+			cout << "\nPut the pendulum at upright position and press 'P' to start program." << endl;
+			if (key == 'p')  {				
+				destroyAllWindows();
+				pbreak = true;
+			}
+
+			if (key == 27) camera->Close();
+		
+		}
+#endif
+		//Asynchronous-Frame-Grabbing (zu Testzwecken)
+		// --------------------------------------------------------------------- //		
+		//hy: in order to update height
+		//PixelFormat festlegen
+		err = camera->GetFeatureByName("PixelFormat", pFeature);
+		err = pFeature->SetValue(pxFormat);
+
+		err = camera->GetFeatureByName("Height", pFeature);
+		err = pFeature->SetValue(height);
+
+		//OffsetY festlegen
+		err = camera->GetFeatureByName("OffsetY", pFeature);
+		err = pFeature->SetValue(offset_y);
+
+		//Belichtungszeit feslegen
+		err = camera->GetFeatureByName("ExposureTimeAbs", pFeature);
+		err = pFeature->SetValue(exposuretime);
+		// --------------------------------------------------------------------- //				
+
+		err = camera->GetFeatureByName("GVSPAdjustPacketSize", pFeature);
+		err = pFeature->RunCommand();
+
+		if (err == VmbErrorSuccess)
+		{
+			bool bCommDone = false;
+			do
+			{
+				if (VmbErrorSuccess != pFeature->IsCommandDone(bCommDone))
+				{
+					break;
+				}
+			} while (false == bCommDone);
+		}
+
+
+		MyFrameObserver* m_pFrameObserver = new MyFrameObserver(camera, showimages, pCtrl);
+		
+		err = camera->StartContinuousImageAcquisition(framebuffersize, IFrameObserverPtr(m_pFrameObserver));
+
+
+		if (err == VmbErrorSuccess)
+		{
+			cout << "Press <enter> to stop aquisiton..." << endl;
+	
+#if(pendelmove == 0)
+
+			
+			int manual = 1;
+			float xposition;
+			do{
+				//add user interaction control
+				int key = _getch();
+
+				switch (key)
+				{
+					//L
+				case 75: 	//case 1113937: 2424832
+					pCtrl.moveLeftSlow();
+					xposition = pCtrl.getXPos();
+					cout << "powercube xpos;" << xposition << endl;
+					break;
+				case 77:  	//case 1113939: 2555904
+					pCtrl.moveRightSlow();
+					xposition = pCtrl.getXPos();
+					cout << "powercube xpos;" << xposition << endl;
+					break;
+				case 'f':
+					pCtrl.moveRightFast();
+					break;
+				case 27:
+					pCtrl.home();
+					manual = 0;
+				}
+			} while (manual==1);
+			
+#endif
+
+
+
+			getchar();
+
+			camera->StopContinuousImageAcquisition();
+		}
+		camera->Close();
+
+		system("PAUSE");
+	}
+	else
+	{
+		cout << "Die gewuenschte Kamera ist nicht verfuegbar!" << endl;
+	}
+
+	sys.Shutdown();
+	system("PAUSE");
+	
+	
+//	// ================================  PowerCube  ==================================== //
+//			
+//	/*PowerCubeControl pcc;*/
+//#if (pendelmove == 1)
+//	//	PCube_setDllDebug( 1, 10, 1);
+// 
+//
+//	std::cout << "Connecting CAN driver..." << std::endl;
+//	char initString[] = "ESD:0,125"; //linear axis 0 deviceID
+//
+//
+//	int ret = PCube_openDevice(&deviceID, initString);
+//	if (ret) {
+//		std::cout << "*** Connect CAN driver FAILED ***" << std::endl;
+//		std::cout << "Returnvalue: " << ret << std::endl;
+//		PCube_closeDevice(deviceID);
+//		return EXIT_FAILURE;
+//	}
+//	else {
+//		std::cout << "Connect CAN driver OK" << std::endl;
+//		std::cout << "   deviceID:         " << deviceID << std::endl;
+//		std::cout << "   deviceInitString: " << PCube_getDeviceInitString(deviceID) << std::endl;
+//		std::cout << "   deviceName:       " << PCube_getDeviceName(deviceID) << std::endl;
+//	}
+//
+//
+//	int deviceCount = PCube_getDeviceCount();
+//	std::cout << "PCube_getDeviceCount(): " << deviceCount << std::endl;
+//
+//	moduleCount = PCube_getModuleCount(deviceID);
+//	std::cout << "Number of Modules: " << moduleCount << std::endl;
+//	if (moduleCount <= 0)
+//	{
+//		std::cout << "*** Found negative or zero number of modules ***" << std::endl;
+//		PCube_closeDevice(deviceID);
+//		return EXIT_FAILURE;
+//	}
+//
+//	int moduleLocations_array[MAX_MODULES]; //MAX_MODULES from m5apiw32.h
+//	for (unsigned int i = 0; i < moduleCount; i++) {
+//		moduleLocations_array[i] = -1;
+//	}
+//	moduleID.resize(moduleCount);
+//
+//	ret = PCube_getModuleIdMap(deviceID, moduleLocations_array);
+//	std::cout << "PCube_getModuleIdMap: " << ret << std::endl;
+//
+//	for (unsigned int i = 0; i < moduleCount; i++) {
+//		moduleID[i] = moduleLocations_array[i];
+//	}
+//
+//	printAxisInfo();
+//
+//	std::cout << "***********************" << std::endl;
+//	std::cout << "Passing control to user" << std::endl;
+//	std::cout << "Type: " << CMD_HELP << " for help" << std::endl;
+//
+//	bool done = false;
+//	while (!done)
+//	{
+//		std::cout << "#"; std::flush(std::cout);
+//		std::string input;
+//		//std::cin >> input;
+//		getline(std::cin, input);
+//		if (parseAndRunCommand(input) == QUIT_PROG) {
+//			done = true;
+//		}
+//	}
+//	
+//
+//	PCube_closeDevice(deviceID);
+//#endif
+//
+//
+//	// =========================================================== //
+//	
+//}
+//
+//int parseAndRunCommand_hy(const std::string input)
+//{
+//
+//
+//}
+//
+//int parseAndRunCommand(const std::string input)
+//{
+//	char cmd[50];
+//	cmd[0] = EOF;
+//	int cmd_mod;
+//	float cmd_arg;
+//	float cmd_vel, cmd_acc;
+//	std::cout << input << std::endl;
+//	sscanf(input.c_str(), "%s %i %f %f %f", cmd, &cmd_mod, &cmd_arg, &cmd_vel, &cmd_acc);
+//
+//	std::cout << "mod = " << cmd_mod << std::endl;
+//	std::cout << "arg = " << cmd_arg << std::endl;
+//
+//	/*checking for errors in input*/
+//	if (cmd[0] == EOF) {
+//		std::cout << "Please type in a command" << std::endl;
+//		return PARSE_ERROR;
+//	}
+//	if (cmd_mod <= 0) {
+//		std::cout << "Please provide correct moduleID!" << std::endl;
+//		return PARSE_ERROR;
+//	}
+//
+//
+//	int ret;
+//	if (strcmp(cmd, CMD_QUIT) == 0){
+//		return QUIT_PROG;
+//	}
+//	else if (strcmp(cmd, CMD_HOME) == 0) {
+//		std::cout << "Homing module " << cmd_mod; std::flush(std::cout);
+//		ret = PCube_homeModule(deviceID, cmd_mod);
+//		std::cout << " - returned: " << ret << std::endl;
+//		return 0;
+//	}
+//	else if (strcmp(cmd, CMD_HOME_ALL) == 0) {
+//		std::cout << "Homing all modules"; std::flush(std::cout);
+//		ret = PCube_homeAll(deviceID);
+//		std::cout << " -  returned: " << ret << std::endl;
+//		return 0;
+//	}
+//	else if (strcmp(cmd, CMD_MV_VEL) == 0){
+//		std::cout << "Moving with Velocity" << cmd_mod << " with " << cmd_arg; std::flush(std::cout);
+//		ret = PCube_moveVel(deviceID, cmd_mod, cmd_arg);
+//		PCube_waitForMotionEnd(deviceID, cmd_mod, 1000);
+//		std::cout << " - returned: " << ret << std::endl;
+//	}
+//	//sb:type command kippen
+//	//the pendel will move left and right continuously
+//	else if (strcmp(cmd, CMD_KIPP) == 0){
+//		std::cout << "Pendel kippen"; std::flush(std::cout);
+//		while (true){
+//			ret = PCube_moveRamp(deviceID, cmd_mod, 0.4, 0.8, 4);
+//			PCube_waitForMotionEnd(deviceID, cmd_mod, 1000);
+//			ret = PCube_moveRamp(deviceID, cmd_mod, 0.2, 0.8, 4);
+//			PCube_waitForMotionEnd(deviceID, cmd_mod, 1000);
+//		}
+//		std::cout << " -  returned: " << ret << std::endl;
+//		return 0;
+//	}
+//	//hy:type command midpos
+//	//the pendel will move left and right continuously
+//	else if (strcmp(cmd, CMD_MID) == 0){
+//		std::cout << "Pendel moves to middle pos"; std::flush(std::cout);
+//		
+//			ret = PCube_moveRamp(deviceID, cmd_mod, 0.2499, 0.8, 4);
+//			PCube_waitForMotionEnd(deviceID, cmd_mod, 1000);			
+//		
+//		std::cout << " -  returned: " << ret << std::endl;
+//		return 0;
+//	}
+//	else if (strcmp(cmd, CMD_INFO) == 0){
+//		printAxisInfo();
+//		return 0;
+//	}
+//	else if (strcmp(cmd, CMD_SET_ACC) == 0){
+//		std::cout << "Setting maxacc"; std::flush(std::cout);
+//		ret = PCube_setMaxAcc(deviceID, cmd_mod, cmd_arg);
+//		std::cout << " -  returned: " << ret << std::endl;
+//		return 0;
+//	}
+//	else if (strcmp(cmd, CMD_SET_VEL) == 0){
+//		std::cout << "Setting maxvel"; std::flush(std::cout);
+//		ret = PCube_setMaxVel(deviceID, cmd_mod, cmd_arg);
+//		std::cout << " -  returned: " << ret << std::endl;
+//		return 0;
+//	}
+//	else if (strcmp(cmd, CMD_MV_POS) == 0){
+//		std::cout << "Moving module " << cmd_mod << " to " << cmd_arg; std::flush(std::cout);
+//		//ret = PCube_movePos( deviceID, cmd_mod, cmd_arg);
+//		ret = PCube_moveStep(deviceID, cmd_mod, cmd_arg, 500.0);
+//		PCube_waitForMotionEnd(deviceID, cmd_mod, 1000);
+//		std::cout << " -  returned: " << ret << std::endl;
+//		return 0;
+//	}
+//	else if (strcmp(cmd, CMD_MV_POS_RAMP) == 0){
+//		std::cout << "Moving ramp module " << cmd_mod << " to " << cmd_arg; std::flush(std::cout);
+//		ret = PCube_moveRamp(deviceID, cmd_mod, cmd_arg, cmd_vel, cmd_acc);
+//		PCube_waitForMotionEnd(deviceID, cmd_mod, 1000);
+//		std::cout << " -  returned: " << ret << std::endl;
+//		return 0;
+//	}
+//	else if (strcmp(cmd, CMD_HELP) == 0){
+//		printHelp();
+//		return 0;
+//	}
+//	return 0;
+//}
+//
+//
+//void printHelp()
+//{
+//	std::cout << "******************************" << std::endl;
+//	std::cout << "Usage: [command] [moduleID] [argument]" << std::endl;
+//	std::cout << CMD_HELP << "\tprints this help" << std::endl;
+//	std::cout << CMD_QUIT << "\tterminates the program" << std::endl;
+//	std::cout << CMD_HOME << "\thome axis [moduleID]" << std::endl;
+//	std::cout << CMD_HOME_ALL << "\thome axis [all]" << std::endl;
+//	std::cout << CMD_INFO << "\tprint out axis info" << std::endl;
+//	std::cout << CMD_MV_POS << "\tmove axis [moduleID] to position [argument]" << std::endl;
+//	std::cout << CMD_SET_ACC << "\tset axis [moduleID] max acceleration to [argument]" << std::endl;
+//	std::cout << CMD_SET_VEL << "\tset axis [moduleID] max velocity to [argument]" << std::endl;
+//	std::cout << CMD_MV_POS_RAMP << "\t" << std::endl;
+//	//	std::cout << CMD_ << "\t" << std::endl;
+//
+//}
+//
+//void printAxisInfo()
+//{
+//	for (unsigned int i = 0; i<moduleCount; i++) {
+//		unsigned long moduleState;
+//		unsigned char moduleType;
+//		unsigned short moduleVersion;
+//		unsigned long int serialNumber;
+//		PCube_getModuleState(deviceID, moduleID[i], &moduleState);
+//		PCube_getModuleType(deviceID, moduleID[i], &moduleType);
+//		PCube_getModuleVersion(deviceID, moduleID[i], &moduleVersion);
+//		PCube_getModuleSerialNo(deviceID, moduleID[i], &serialNumber);
+//		std::string type = "unknown";
+//		if (moduleType == TYPEID_MOD_ROTARY) {
+//			type = "rotary";
+//		}
+//		else if (moduleType == TYPEID_MOD_LINEAR) {
+//			type = "linear";
+//		}
+//		std::cout << "i: " << i << "; moduleID: " << moduleID[i] << "; type: " << type << ", state: " << moduleState << "; serial#: " << serialNumber << std::endl;
+//
+//
+//		float defMaxVel, defMaxAcc, maxVel, maxAcc, aktVel, iPolVel;
+//		PCube_getDefMaxVel(deviceID, moduleID[i], &defMaxVel);
+//		PCube_getDefMaxAcc(deviceID, moduleID[i], &defMaxAcc);
+//		PCube_getMaxVel(deviceID, moduleID[i], &maxVel);
+//		PCube_getMaxAcc(deviceID, moduleID[i], &maxAcc);
+//		PCube_getVel(deviceID, moduleID[i], &aktVel);
+//		PCube_getIPolVel(deviceID, moduleID[i], &iPolVel);
+//		std::cout << "\tdefMaxVel: " << defMaxVel << ", maxVel: " << maxVel << ", aktVel: " << aktVel << ", iPolVel: " << iPolVel << std::endl;
+//		std::cout << "\tdefMaxAcc: " << defMaxAcc << ", maxAcc: " << maxAcc << std::endl;
+//
+//		short int defA0, defC0, defDamp, A0, C0, Damp;
+//		PCube_getDefA0(deviceID, moduleID[i], &defA0);
+//		PCube_getDefC0(deviceID, moduleID[i], &defC0);
+//		PCube_getDefDamp(deviceID, moduleID[i], &defDamp);
+//		PCube_getA0(deviceID, moduleID[i], &A0);
+//		PCube_getC0(deviceID, moduleID[i], &C0);
+//		PCube_getDamp(deviceID, moduleID[i], &Damp);
+//		std::cout << "\tdefA0: " << defA0 << ", defC0: " << defC0 << ", defDamp: " << defDamp << std::endl;
+//		std::cout << "\t   A0: " << A0 << ",    C0: " << C0 << ",    Damp: " << Damp << std::endl;
+//
+//
+//		float defMinPos, defMaxPos, minPos, maxPos, maxDeltaPos, aktPos;
+//		PCube_getDefMinPos(deviceID, moduleID[i], &defMinPos);
+//		PCube_getDefMaxPos(deviceID, moduleID[i], &defMaxPos);
+//		PCube_getMinPos(deviceID, moduleID[i], &minPos);
+//		PCube_getMaxPos(deviceID, moduleID[i], &maxPos);
+//		PCube_getMaxDeltaPos(deviceID, moduleID[i], &maxDeltaPos);
+//		PCube_getPos(deviceID, moduleID[i], &aktPos);
+//		std::cout << "\tdefMinPos: " << defMinPos << ", defMaxPos: " << defMaxPos << ", maxDeltaPos: " << maxDeltaPos << std::endl;
+//		std::cout << "\t   MinPos: " << minPos << ",    MaxPos: " << maxPos << ", aktPos: " << aktPos << std::endl;
+//
+//		float defMaxCur, maxCur, aktCur;
+//		PCube_getDefMaxCur(deviceID, moduleID[i], &defMaxCur);
+//		PCube_getMaxCur(deviceID, moduleID[i], &maxCur);
+//		PCube_getCur(deviceID, moduleID[i], &aktCur);
+//		std::cout << "\tdefMaxCur: " << defMaxCur << ", MaxCur: " << maxCur << ", aktCur: " << aktCur << std::endl;
+//	}
+}
+
+
+angle.cpp
+//(Proj:InvertedPendulum) measure angle of object which is preprocessed based on colour and form information.
+//Haiyan.2015 
+// 
+//#include "stdafx.h" //precomplied header, no need
+//#include "../export/export.h"
+#define _CRT_SECURE_NO_WARNINGS
+//#include <windows.h>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <map>
+#include <fstream>
+#include "opencv/cv.h"
+#include "opencv/highgui.h"
+#include "opencv2/opencv.hpp"
+
+#include "CoordinateAngle.h"
+//#include "PowerCubeControl.h"
+
+#include <time.h>
+#include <math.h>
+
+//#define CALIBRATION_ON 1
+#define HSV_ON 0    //if the object is obvious and only canny is enough, set HSV_ON 0
+#define CANY_ON 0
+
+float detY_powercube_img=1;
+// could be placed in header file
+//// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+////                 Set #define value to switch on/off outputs
+////
+////switch trackbar function for HSV filter
+//#define Trackbar_ON 1 //set 1 to start on-trackbar
+//
+////switch message output
+//#define INFO_LEVEL_0_ON 1  //LEVEL 0: system setup info
+//#define INFO_LEVEL_2_ON 1  //LEVEL 2: only angle output
+//#define INFO_LEVEL_3_ON 0  //LEVEL 3: detailed, picture size etc
+//
+////switch image output
+//#define IMG_ANGLE_SHOW 0  //1-show result for angle measurement or coordinates, 0- off
+//#define IMG_OTHERS_SHOW 0  //1-show all other images, 0- off
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#define READ_DYNAMIC_FRAME 0 
+#define READ_ROI 0   // read smaller frame, it is done now by Vimba 
+
+//#define DEBUG_ENABLED true  // can use DoSomethingSlowWithTimeout(DEBUG_ENABLED? 5000 : 1000); to set diff timeout
+//#ifdef DEBUG_ENABLED
+//#define D(x) do { x } while(0)
+//#else
+//#define D(x) do { } while(0)
+//#endif
+
+using namespace std;
+using namespace cv;
+const double PI  = 3.141592653589793238463;
+const float  PI_F = 3.14159265358979f;
+int FRAME_WIDTH = 320;
+int FRAME_HEIGHT= 160;
+
+
+//float cannyUpper = 150; //
+//float cannyLow = 50; //
+
+////// define path D:\1study_TU\5_Semester\IAT_Proj\trainangle
+////VideoRedRode  Videoline2 Videoline.asf VideoCapPendeldirectShort.asf 
+const std::string IMAGE_DIR = "D:/1study_TU/5_Semester/IAT_Proj/trainangle/";
+const std::string IMAGE_DIR_FILE = IMAGE_DIR + "VideoROI.asf";
+const std::string PICTURE = IMAGE_DIR + "camOrange1addThinHori3.bmp";	//camOrange1addMorePositions  camOrange1  0.25  camOrange1add_line_xs camOrange1addThinHori3.bmp
+
+//Size size(320,160);//the dst image size,e.g.100x80 ori 640x320
+//frame region for pendulum video
+//cv::Rect myROI(0, 145, 640, 148);
+// for picture
+//cv::Rect myROI(0, 100, 640, 200); // change to set it based on info about imgOri.cols
+
+//////threshold for pendulum with orange label on the square
+//int iLowH = 2;//12
+//int iHighH = 10;//19
+//
+//int iLowS = 152; //9
+//int iHighS = 231;//255
+//
+//int iLowV = 187;
+//int iHighV = 255;
+
+////threshold for pendulum with pink label on the square, light on, 38000
+//int iLowH = 2;//12
+//int iHighH = 10;//19
+//
+//int iLowS = 152; //9
+//int iHighS = 220;//255
+//
+//int iLowV = 14;
+//int iHighV = 49;
+////threshold for pendulum with pink label on the square, light on, 10000
+//int iLowH = 27;//12
+//int iHighH = 179;//19
+//
+//int iLowS = 136; //9
+//int iHighS = 255;//255
+//
+//int iLowV = 0;
+//int iHighV = 99;
+
+
+//////threshold for pendulum with orange label on the square, 17:00
+//int iLowH = 0;//12
+//int iHighH = 179;//19
+//
+//int iLowS = 0; //9
+//int iHighS = 147;//255
+//
+//int iLowV = 24;
+//int iHighV = 129;
+
+//////threshold for pendulum with orange label on the square, late time
+int iLowH = 2;//12
+int iHighH = 10;//19
+
+int iLowS = 166; //9
+int iHighS = 231;//255
+
+int iLowV = 75;
+int iHighV = 255;
+
+//thresholds for boundingBox (minRect)
+int minArea = 64;
+int boxHeight = 20;
+int size_1 = 3;//erode
+int size_2 = 3;//erode2
+int size_3 = 9;//dilitation
+int size_4 = 3;//dilitation2, use it to enlarge the contour
+int size_5 = 3;//blur
+
+RNG rng(12345);
+
+//initial for HoughlinesP
+int minschnittpunkt=8; //if height 60: 10, if height 2, =2,27
+int minlength=10; //if height 60,=24; if height 2, =1,47
+int gap=50;
+
+
+Mat imgSrc;
+Mat imgHSV;
+Mat imgThresholded; // morphorlogical operation result
+Mat img_gray; // preprocess result
+
+ 
+////--------------------------------------------------------------------------------------
+//MyFrameObserver::MyFrameObserver(CameraPtr pCamera, boolean showimg, PowerCubeControl pc_ctrl) :IFrameObserver(pCamera), showimg(showimg), pc_ctrl(pc_ctrl)
+
+CoordinateAngle::CoordinateAngle(Mat imgOri,PowerCubeControl pc_ctrl) : imgOri(imgOri),pc_ctrl(pc_ctrl)
+{
+	//PowerCubeControl pc_ctrl(6);
+}
+
+string CoordinateAngle::intToString(int number)
+{
+	std::stringstream ss;
+	ss << number;
+	return ss.str();
+}
+
+void CoordinateAngle::on_trackbar()
+{
+	 namedWindow("Trackbar", CV_WINDOW_NORMAL); //create a window called "Control"
+	 createTrackbar("LowH", "Trackbar", &iLowH, 179); //Hue (0 - 179)
+	 createTrackbar("HighH", "Trackbar", &iHighH, 179);
+
+	 createTrackbar("LowS", "Trackbar", &iLowS, 255); //Saturation (0 - 255)
+	 createTrackbar("HighS", "Trackbar", &iHighS, 255);
+
+	 createTrackbar("LowV", "Trackbar", &iLowV, 255); 
+	 createTrackbar("HighV", "Trackbar", &iHighV, 255);	
+
+	 createTrackbar("size1","Trackbar", &size_1,15);
+	 createTrackbar("size2","Trackbar", &size_2,15);
+	 createTrackbar("size3","Trackbar", &size_3,15);
+	 createTrackbar("size4","Trackbar", &size_4,15);
+
+	 createTrackbar("MinArea", "Trackbar",&minArea, 400);
+	 createTrackbar("boxHeight","Trackbar",&boxHeight, 60);
+	 	
+	namedWindow("Trackbar_houghline", CV_WINDOW_AUTOSIZE); 
+	createTrackbar("minPoints", "Trackbar_houghline", &minschnittpunkt, 100); 
+	createTrackbar("length", "Trackbar_houghline", &minlength, 100);
+	createTrackbar("gap", "Trackbar_houghline", &gap, 50);
+
+}
+
+
+void CoordinateAngle::preprocess_HSV()
+{
+	cv::cvtColor(imgOri, imgHSV, COLOR_BGR2HSV); //Convert the captured frame from BGR to HSV
+
+	inRange(imgHSV, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), imgThresholded); //Threshold the image	
+#if(IMG_OTHERS_SHOW == 1)
+	imshow("HSVThreshold", imgThresholded);
+#endif
+
+			///* morphological operation, to remove small outsiders, use twice make difference */
+		///morphological opening (remove small objects from the foreground)
+		erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(size_1, size_1)) );
+		//////erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(size_2, size_2)) );		
+
+		////////morphological closing (fill small holes in the foreground)
+		dilate( imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(size_3, size_3)) ); 
+		////dilate( imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(size_4, size_4)) );
+
+#if(IMG_OTHERS_SHOW == 1)
+		imshow("Morpholog.", imgThresholded);
+#endif
+}
+
+
+
+		 
+void CoordinateAngle::preprocess_CANY()
+{
+	//blur( imgThresholded, imgThresholded, Size(size_5,size_5) ); // remove noise
+
+	//GaussianBlur(imgThresholded, imgThresholded, Size(size_5,size_5), 2, 2);
+	//cv::cvtColor(imgOri, imgThresholded, COLOR_BGR2GRAY);
+	//blur(imgThresholded, imgThresholded, Size(size_5, size_5));
+		// alternative use mean gray value
+		//Scalar tempVal = mean(imgOri); //			
+		//float myMatMean = (float)tempVal.val[0]; // //92
+		//float cannyUpper = (float)1.33*myMatMean; //
+		//float cannyLow = (float)0.66*myMatMean; //
+		//cout << "mean, upper, low\t" << myMatMean << ",  " << cannyUpper << ",  " << cannyLow << endl;			
+
+	float cannyUpper = 150; //
+	float cannyLow = 50; //
+	Canny(imgThresholded, imgThresholded, cannyLow, cannyUpper, 3); //
+
+#if(IMG_OTHERS_SHOW == 1)
+		imshow("canny", imgThresholded);
+#endif
+}
+
+//hy:1 one line center point with fast ptr
+float CoordinateAngle::detectPendulumPtrCP()
+{
+	preprocess_HSV();
+	int nonzerocount = 0;
+	int endcol;
+	int row = 0; // 0, from which row start to read
+
+	float XPos = 0;
+	/*for (int row = 0; row < imgThresholded.rows; row++)
+	{*/
+	//const int* px = imgThresholded.ptr<int>(row);
+	uchar* px = imgThresholded.ptr<uchar>(row);
+
+	for (int col = 0; col < imgThresholded.cols; col++)
+	{
+		if (px[col] != 0)
+		{
+			nonzerocount++;
+			endcol = col;
+
+#if(INFO_LEVEL_3_ON == 1)
+			clog << "px;row;col;nonzerocount is;" << px[col] << ";" << row << ";" << col << "; " << nonzerocount << endl;
+			//cout << "nonzerocount is;" << nonzerocount << endl;
+#endif		
+		}
+	}
+	//}
+	XPos = endcol - nonzerocount / 2.;
+#if(INFO_LEVEL_2_ON == 1)	
+	clog << "ptr CP XPos: " << XPos << endl;
+#endif
+#if(IMG_ANGLE_SHOW == 1)
+	circle(imgOri, cv::Point((int)XPos, (int)imgThresholded.rows), 1, CV_RGB(0, 244, 0), 2);
+	imshow("OriginalCenterPoint", imgOri); //show the original image plus center point
+#endif
+
+	return XPos;
+}
+
+//hy:1a. return angle, use one line center point with fast ptr and getPos() from PowerCube
+float CoordinateAngle::detectPendulumPtrCP_PcubeAngle()
+{
+	preprocess_HSV();
+	int nonzerocount = 0;
+	int endcol;
+	int row = 0; // 0, from which row start to read
+
+	float XPos1 = 0;
+	float XPos2 = 0;
+	/*for (int row = 0; row < imgThresholded.rows; row++)
+	{*/
+	//const int* px = imgThresholded.ptr<int>(row);
+	uchar* px = imgThresholded.ptr<uchar>(row);
+
+	for (int col = 0; col < imgThresholded.cols; col++)
+	{
+		if (px[col] != 0)
+		{
+			nonzerocount++;
+			endcol = col;
+
+#if(INFO_LEVEL_3_ON == 1)
+			clog << "px;row;col;nonzerocount is;" << px[col] << ";" << row << ";" << col << "; " << nonzerocount << endl;
+			//cout << "nonzerocount is;" << nonzerocount << endl;
+#endif		
+		}
+	}
+	//}
+	XPos1 = endcol - nonzerocount / 2.;
+#if(INFO_LEVEL_2_ON == 1)	
+	clog << "ptr CP XPos (x1): " << XPos1 << endl;
+#endif
+#if(IMG_ANGLE_SHOW == 1)
+	circle(imgOri, cv::Point((int)XPos, (int)imgThresholded.rows), 1, CV_RGB(0, 244, 0), 2);
+	imshow("OriginalCenterPoint", imgOri); //show the original image plus center point
+#endif
+
+	XPos2=pc_ctrl.getXPos();
+	XPos2=90;
+	float detX = XPos2 - XPos1;//
+	return calcAngle(detX,detY_powercube_img);
+}
+
+float CoordinateAngle::calcPCubeImgDetY(float detX)
+{
+	detY_powercube_img = detX /tan((-30)*PI_F/180.0);
+	return detY_powercube_img;
+}
+
+float CoordinateAngle::calcAngle(float detX, float detY)
+{
+	float angle = atan(detX / detY) * 180 / PI_F;
+
+#if(INFO_LEVEL_2_ON == 1)	
+	cout << "angle: " << angle << endl;
+#endif
+	return angle;
+}
+//hy:2
+float CoordinateAngle::detectPendulumPtrMC()
+{
+	preprocess_HSV();
+	int nonzerocount = 0;
+	int endcol = 0;
+	//int row = 0; // from which row start to read
+
+
+	float XPos = 0;
+	for (int row = 0; row < imgThresholded.rows; row++)
+	{
+		//const int* px = imgThresholded.ptr<int>(row);
+		uchar* px = imgThresholded.ptr<uchar>(row);
+
+		for (int col = 0; col < imgThresholded.cols; col++)
+		{
+			if (px[col] != 0)
+			{
+				nonzerocount++;
+				endcol += col;
+
+#if(INFO_LEVEL_3_ON == 1)
+				clog << "px;col;nonzerocount is;" << px[col] << ";" << col << ";" << nonzerocount << endl;
+				//cout << "nonzerocount is;" << nonzerocount << endl;
+#endif		
+			}
+		}
+	}
+	XPos = endcol / nonzerocount;
+#if(INFO_LEVEL_2_ON == 1)	
+	clog << "img XPos: " << XPos << endl;
+#endif
+#if(IMG_ANGLE_ON == 1)
+	circle(imgOri, cv::Point((int)XPos, (int)imgThresholded.rows), 1, CV_RGB(0, 244, 0), 2);
+	imshow("OriginalCenterPoint", imgOri); //show the original image plus center point
+#endif
+	return XPos;
+}
+
+// hy:3 find two points, return angle, 
+float CoordinateAngle::detectPendulumPtrAngleSP()
+{
+	preprocess_HSV();
+	int endcol_1 = 0;
+	int endcol_2 = 0;
+	int row_1 = 0; // from which row start to read
+	int row_2 = imgThresholded.rows - 2;
+	//int row_2 = 87;
+	float XPos1 = 0;
+	float XPos2 = 0;
+
+	float angle = 9;
+
+
+	/*for (int row = 0; row < imgThresholded.rows; row++)
+	{*/
+	//const int* px = imgThresholded.ptr<int>(row);
+	uchar* px = imgThresholded.ptr<uchar>(row_1);
+
+	for (int col = 0; col < imgThresholded.cols; col++)
+	{
+		if (px[col] != 0)
+		{
+			endcol_1 = col;
+			break;
+
+#if(INFO_LEVEL_3_ON == 1)
+			clog << "px;col;nonzerocount is;" << px[col] << ";" << col << ";" << endl;
+			//cout << "nonzerocount is;" << nonzerocount << endl;
+#endif		
+		}
+	}
+
+	XPos1 = endcol_1;   // p1 (XPos1, row_1)
+	uchar* px2 = imgThresholded.ptr<uchar>(row_2);
+
+	// get bottom p
+	for (int col = 0; col < imgThresholded.cols; col++)
+	{
+		if (px2[col] != 0)
+		{
+			endcol_2 = col;
+			break;
+
+#if(INFO_LEVEL_3_ON == 1)
+			clog << "px;col is;" << px[col] << ";" << col << ";" << endl;
+			//cout << "nonzerocount is;" << nonzerocount << endl;
+#endif		
+		}
+	}
+
+	XPos2 = endcol_2;   // p2 (XPos2, row_2)
+	float detY = row_1 - row_2;//  
+	float detX = XPos2 - XPos1;//
+
+	//angle = detY >= 0 ? 90 - atan(detY / detX) * 180 / PI : (-90 - atan(detY / detX) * 180 / PI); // faster if the value saved before like this
+	angle = atan(detX / detY) * 180 / PI_F;
+
+#if(INFO_LEVEL_2_ON == 1)	
+	cout << "img XPos1;img XPos2; angle: " << XPos1 << ";" << XPos2 << ";" << angle << endl;
+#endif
+#if(IMG_ANGLE_ON == 1) // todo:replace to angle
+	//circle(imgOri, cv::Point((int)XPos, (int)imgThresholded.rows), 1, CV_RGB(0, 244, 0), 2);
+	//imshow("OriginalCenterPoint", imgOri); //show the original image plus center point
+#endif
+	return angle;
+}
+
+// hy:4 find two line center points, return angle, 
+float CoordinateAngle::detectPendulumPtrAngleCP()
+{
+	preprocess_HSV();
+	int nonzerocount = 0;
+	int endcol_1 = 0;
+	int endcol_2 = 0;
+	int row_1 = 0; // from which row start to read
+	int row_2 = imgThresholded.rows - 10;
+
+	float XPos1 = 0;
+	float XPos2 = 0;
+
+	float angle = 9;
+	/*for (int row = 0; row < imgThresholded.rows; row++)
+	{*/
+	//const int* px = imgThresholded.ptr<int>(row);
+	uchar* px = imgThresholded.ptr<uchar>(row_1);
+
+	for (int col = 0; col < imgThresholded.cols; col++)
+	{
+		if (px[col] != 0)
+		{
+			nonzerocount++;
+			endcol_1 = col;
+
+#if(INFO_LEVEL_3_ON == 1)
+			clog << "px;col;nonzerocount is;" << px[col] << ";" << col << ";" << nonzerocount << endl;
+			//cout << "nonzerocount is;" << nonzerocount << endl;
+#endif		
+		}
+	}
+	XPos1 = endcol_1 - (float)(nonzerocount / 2.);   // p1 (XPos1, row_1)
+	px = imgThresholded.ptr<uchar>(row_2);
+	nonzerocount = 0;
+	// get bottom center p
+	for (int col = 0; col < imgThresholded.cols; col++)
+	{
+		if (px[col] != 0)
+		{
+			nonzerocount++;
+			endcol_2 = col;
+
+#if(INFO_LEVEL_3_ON == 1)
+			clog << "px;col;nonzerocount is;" << px[col] << ";" << col << ";" << nonzerocount << endl;
+			//cout << "nonzerocount is;" << nonzerocount << endl;
+#endif		
+		}
+	}
+
+	XPos2 = (float)endcol_2 - (float)nonzerocount / 2.;   // p2 (XPos2, row_2)
+	float detY = row_1 - row_2;//  
+	float detX = XPos2 - XPos1;//
+
+	//angle = detY >= 0 ? 90 - atan(detY / detX) * 180 / PI : (-90 - atan(detY / detX) * 180 / PI); // faster if the value saved before like this
+	angle = atan(detX / detY) * 180 / 3.14159265358979f;
+
+#if(INFO_LEVEL_2_ON == 1)	
+	clog << "\n(detectPendulumPtrAngleCP) img XPos1;img XPos2; angle: " << XPos1 << ";" << XPos2 << ";" << angle << endl;
+#endif
+#if(IMG_ANGLE_ON == 1) //todo replace to angle
+	//circle(imgOri, cv::Point((int)XPos, (int)imgThresholded.rows), 1, CV_RGB(0, 244, 0), 2);
+	//imshow("OriginalCenterPoint", imgOri); //show the original image plus center point
+#endif
+	return angle;
+}
+
+//hy: 4a for calculating PCube_img_detY, return XPos1
+float CoordinateAngle::detectPendulumPtrAngleCP_cali()
+{
+	preprocess_HSV();
+	int nonzerocount = 0;
+	int endcol_1 = 0;
+	int endcol_2 = 0;
+	int row_1 = 0; // from which row start to read
+	int row_2 = imgThresholded.rows - 10;
+
+	float XPos1 = 0;
+	float XPos2 = 0;
+
+	float angle = 9;
+	/*for (int row = 0; row < imgThresholded.rows; row++)
+	{*/
+	//const int* px = imgThresholded.ptr<int>(row);
+	uchar* px = imgThresholded.ptr<uchar>(row_1);
+
+	for (int col = 0; col < imgThresholded.cols; col++)
+	{
+		if (px[col] != 0)
+		{
+			nonzerocount++;
+			endcol_1 = col;
+
+#if(INFO_LEVEL_3_ON == 1)
+			clog << "px;col;nonzerocount is;" << px[col] << ";" << col << ";" << nonzerocount << endl;
+			//cout << "nonzerocount is;" << nonzerocount << endl;
+#endif		
+		}
+	}
+	XPos1 = endcol_1 - (float)(nonzerocount / 2.);   // p1 (XPos1, row_1)
+	px = imgThresholded.ptr<uchar>(row_2);
+	nonzerocount = 0;
+	// get bottom center p
+	for (int col = 0; col < imgThresholded.cols; col++)
+	{
+		if (px[col] != 0)
+		{
+			nonzerocount++;
+			endcol_2 = col;
+
+#if(INFO_LEVEL_3_ON == 1)
+			clog << "px;col;nonzerocount is;" << px[col] << ";" << col << ";" << nonzerocount << endl;
+			//cout << "nonzerocount is;" << nonzerocount << endl;
+#endif		
+		}
+	}
+
+	XPos2 = (float)endcol_2 - (float)nonzerocount / 2.;   // p2 (XPos2, row_2)
+	float detY = row_1 - row_2;//  
+	float detX = XPos2 - XPos1;//
+
+	//angle = detY >= 0 ? 90 - atan(detY / detX) * 180 / PI : (-90 - atan(detY / detX) * 180 / PI); // faster if the value saved before like this
+	angle = atan(detX / detY) * 180 / 3.14159265358979f;
+
+#if(INFO_LEVEL_2_ON == 1)	
+	clog << "\n(using detectPendulumPtrAngleCP_cali) img XPos1;img XPos2; angle: " << XPos1 << ";" << XPos2 << ";" << angle << endl;
+#endif
+#if(IMG_ANGLE_ON == 1) //todo replace to angle
+	//circle(imgOri, cv::Point((int)XPos, (int)imgThresholded.rows), 1, CV_RGB(0, 244, 0), 2);
+	//imshow("OriginalCenterPoint", imgOri); //show the original image plus center point
+#endif
+	return XPos1;
+}
+//measure the angle of a preprocessed img_gray image
+void CoordinateAngle::detectPendulumWithminRectangle()//  
+{
+    Mat threshold_output;
+    vector<vector<Point> > contours;
+    vector<Vec4i> hierarchy;
+ 
+    /// Detect edges 	   
+	imgThresholded.convertTo(threshold_output, CV_8U);
+
+    /// Find contours
+    findContours( threshold_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+
+	if(contours.size()>=1)
+    /// Find the rotated rectangles and ellipses for each contour
+   { vector<RotatedRect> minRect( contours.size() );	
+  
+	int countObj=0;
+	vector<vector<Point> > contours_poly(contours.size());
+    for( unsigned int i = 0; i < contours.size(); i++ )
+    { 
+		countObj ++;
+		double area = contourArea(contours[i], false);
+#if(INFO_ON == 1)
+	cout << "area " << area << endl; 
+#endif;
+
+		minRect[i] = minAreaRect( Mat(contours[i]) );	
+
+		approxPolyDP(Mat(contours[i]), contours_poly[i], 3, true);
+		Rect boundingBox = boundingRect(Mat(contours_poly[i]));
+
+#if(INFO_ON == 1)
+		cout << "Box Height  \t" << boundingBox.height << endl;
+#endif;
+
+		if( boundingBox.height > boxHeight) 
+		{
+
+		/// Draw contours + rotated rects
+		Mat drawing = Mat::zeros( threshold_output.size(), CV_8UC3 ); 
+        Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
+
+        // contour
+        drawContours( drawing, contours, i, color, 1, 8, vector<Vec4i>(), 0, Point() ); 
+		/// Show in a window
+		namedWindow( "Contours", CV_WINDOW_AUTOSIZE );
+		//imshow( "Contours", drawing );
+
+        // rotated rectangle
+        Point2f rect_points[4]; minRect[i].points( rect_points );
+        for( int j = 0; j < 4; j++ )
+        line( drawing, rect_points[j], rect_points[(j+1)%4], color, 1, 8 );
+		double XPos1 = rect_points[0].x;
+		double YPos1 = rect_points[0].y;
+		double XPos2 = rect_points[1].x;
+		double YPos2 = rect_points[1].y;
+		
+		double detY = YPos1 - YPos2;
+		double detX = XPos1 - XPos2;
+		double angle = detY >= 0 ? 90-atan(detY/detX)*180/PI : (-90-atan(detY/detX)*180/PI); // faster if the value saved before like this
+		//cout << "detected angle; " << angle << endl;
+		//cout << "Object detY; " << detY << endl;
+		//system("pause");
+
+		int iangle = (int)angle;
+		string s_angle = "Angle: "+intToString(iangle);
+		
+		 circle(imgOri, cv::Point((int)XPos1,(int)YPos1),1,CV_RGB(255,0,0),2);
+		 circle(imgOri, cv::Point((int)XPos2,(int)YPos2),1,CV_RGB(255,244,0),2);
+		 
+		 cv::putText(imgOri,s_angle,cv::Point((int)XPos1,(int)YPos1-10),1,1,CV_RGB(255,0,0),2);
+		//imshow("OriginalAngle", imgOri); //show the original image
+	}
+	}
+	}    
+}
+
+void CoordinateAngle::detectPendulumWithMCenterP()//very slow, 0fps
+{
+	vector<Vec4i> hierarchy;
+	vector<vector<Point>> contours;
+	findContours(imgThresholded, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+
+	 /// Get the moments
+  vector<Moments> mu(contours.size() );
+  for( size_t i = 0; i < contours.size(); i++ )
+     { mu[i] = moments( contours[i], false ); 
+
+#if(IMG_OTHERS_ON == 1)
+      // Draw bounding boxes for debug purpose
+      Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255),
+          rng.uniform(0, 255));
+	  drawContours(imgThresholded, contours, 0, color, 2, 8, hierarchy, 0, Point());//replaced i with 0
+	  imshow("img_gray_contour", imgThresholded);
+#endif
+  
+  }
+
+  ///  Get the mass centers:
+  vector<Point2d> mc( contours.size() );
+  for( size_t i = 0; i < contours.size(); i++ )
+     { 
+		mc[i] = Point2d( mu[i].m10/mu[i].m00 , mu[i].m01/mu[i].m00 ); 
+		//string coordinate = intToString(iangle);
+		//cout << "detected center coordinate (" << mc[i].x << "," << mc[i].y << endl;
+		circle(imgOri, mc[i],1,CV_RGB(255,0,0),2);
+		//cv::putText(imgOri,s_angle,mc[i],1,1,CV_RGB(255,0,0),2);
+	 }
+}
+
+//Writen By Sebastian Krone on 17.8.15 15:15
+//Die Methode erkennt anhand er vorhandenen Fläche aus dem imgThresholded den Flächenmittelpunkt (SEHR SCHNELL!!!)
+float CoordinateAngle::detectPendulumWithMCenterP2()
+{
+	preprocess_HSV();
+	int xcount = 0;
+	int count = 0;
+
+	for (int y = 0; y < imgThresholded.rows; y++)
+	{
+		//cout << "Reihe: " << y << endl;
+		for (int x = 0; x < imgThresholded.cols; x++)
+		{
+			//cout << "Spalte: " << x << endl;
+			if ((bool)imgThresholded.at<unsigned char>(y, x))
+			{
+				xcount += x;
+				count++;
+			}
+		}
+	}
+	float cp_x = xcount / (float)count;
+
+#if(INFO_LEVEL_2_ON == 1)	
+	cout << "Detectet center coordinate; x=\t\t" << cp_x << endl;
+#endif
+
+#if(IMG_ANGLE_SHOW == 1)
+	circle(imgOri, cv::Point((int)cp_x, (int)imgThresholded.rows), 1, CV_RGB(0, 244, 0), 2);
+	imshow("OriginalCenterPoint", imgOri); //show the original image plus center point
+#endif
+
+	return cp_x;
+}
+
+
+
+//variante 1: HSV,morph and blur are not used, only use canny
+//variante 2: blur and canny are not used, only use HSV and morph, 
+float CoordinateAngle::detectPendulumWithHoughLinesP()//HSV, morph and blur are not used, precise, angle is measured
+{
+	
+	vector<Vec4i> lines;
+	float angle;
+	//preprocess_HSV();
+	//preprocess_morph();
+	 cv::cvtColor(imgOri, imgThresholded, COLOR_BGR2GRAY);
+	//blur(imgThresholded, imgThresholded, Size(size_5, size_5));
+	preprocess_CANY();
+	//Probabilistic Hough Line Transform, output: extremes of the detected line
+	HoughLinesP(imgThresholded, lines, 1, CV_PI / 180, minschnittpunkt, minlength, gap);
+	//cvtColor(imgThresholded, colordst, CV_GRAY2BGR);
+	if (lines.size()>0 )
+	{
+		Vec4i l_lf = lines[0];
+		//draw lines
+		float XPos1 = l_lf[0];
+		float YPos1 = l_lf[1];
+		float XPos2 = l_lf[2];
+		float YPos2 = l_lf[3];
+		
+		//
+		float detY = YPos1 - YPos2;//  
+		float detX = XPos2 - XPos1;//
+
+		angle = detY >= 0 ? 90 - atan(detY / detX) * 180 / PI : (-90 - atan(detY / detX) * 180 / PI); // faster if the value saved before like this
+
+#if(INFO_LEVEL_2_ON == 1)
+		cout << "detected angle;\t\t " << angle << endl;
+#endif
+
+#if(IMG_ANGLE_SHOW == 1)
+		Mat colordst;
+		cvtColor(imgThresholded, colordst, CV_GRAY2BGR);
+		line(colordst, Point(XPos1, YPos1), Point(XPos2, YPos2), Scalar(0, 0, 255), 3, CV_AA);
+		int iangle = (int)angle;
+		string s_angle = "Angle: " + intToString(iangle);
+		circle(imgOri, cv::Point(XPos1, YPos1), 1, CV_RGB(255, 0, 0), 2);
+		circle(imgOri, cv::Point(XPos2, YPos2), 1, CV_RGB(255, 244, 0), 2);
+		cv::putText(imgOri, s_angle, cv::Point(XPos1, YPos1), 1, 1, CV_RGB(255, 0, 0), 2);
+
+		imshow("OriginalAngle", imgOri); //show the original image plus angle
+		imshow("detected lines", colordst);
+#endif
+
+	}
+	return angle;
+}
+
+float CoordinateAngle::detectPendulumWithHoughLinesPCenterPoint()//not for square model, side line, return x coordinate of the center point
+{
+	Mat colordst;
+	vector<Vec4i> lines;
+	float middlepointY;
+	float middlepointX;
+	//preprocess_HSV();
+	//preprocess_morph();
+	cv::cvtColor(imgOri, imgThresholded, COLOR_BGR2GRAY);
+	//blur(imgThresholded, imgThresholded, Size(size_5, size_5));
+	preprocess_CANY();
+	//Probabilistic Hough Line Transform, output: extremes of the detected line
+	HoughLinesP(imgThresholded, lines, 1, CV_PI / 180, minschnittpunkt, minlength, gap);
+	cvtColor(imgThresholded, colordst, CV_GRAY2BGR);
+
+	if (lines.size()>1)
+	{
+		Vec4i l_lf = lines[0];
+		Vec4i l_rt = lines[1];
+		//draw lines			
+		float XPos1 = (l_lf[0] + l_rt[0]) / 2;
+		//float YPos1 = (l_lf[1] + l_rt[1]) / 2;  // y value not for output
+		float XPos2 = (l_lf[2] + l_rt[2]) / 2;
+		//float YPos2 = (l_lf[3] + l_rt[3]) / 2; //  y value not for output
+		//line(colordst, Point(XPos1, YPos1), Point(XPos2, YPos2), Scalar(0, 0, 255), 3, CV_AA);
+		//line(colordst, Point(l_lf[0], l_lf[1]), Point(l_lf[2], l_lf[3]), Scalar(0, 0, 255), 3, CV_AA);
+		//line(colordst, Point(l_rt[0], l_rt[1]), Point(l_rt[2], l_rt[3]), Scalar(255, 244, 0), 3, CV_AA);
+		//
+
+		//float detY = YPos1 - YPos2;//  
+		float detX = XPos2 - XPos1;//
+		//middlepointY = YPos1 - detY / 2;
+		middlepointX = XPos1 + detX / 2;
+
+#if(IMG_ANGLE_SHOW == 1)						
+		circle(imgOri, cv::Point2f(middlepointX, middlepointY), 1, CV_RGB(0, 244, 0), 2);
+		imshow("OriginalCenterPoint", imgOri); //show the original image plus center point
+		imshow("detected lines", colordst);
+#endif
+
+#if(INFO_LEVEL_2_ON == 1)
+		cout << "PosX of center point;\t\t " << middlepointX << endl;
+#endif
+	}
+	return middlepointX;
+}
+
+float CoordinateAngle::detectPendulumWithHoughLinesP_HCP()//no need canny, precise, fast, horizontal line, return x coordinate of the center point
+{	
+	vector<Vec4i> lines;
+	float middlepointX;
+	//cv::cvtColor(imgOri, imgThresholded, COLOR_BGR2GRAY);
+	//Probabilistic Hough Line Transform, output: extremes of the detected line
+	preprocess_HSV();
+	HoughLinesP(imgThresholded, lines, 1, CV_PI / 180, minschnittpunkt, minlength, gap);	
+	if (lines.size()>0)
+	{
+		Vec4i l = lines[0];		
+		//draw center point			
+		float XPos1 = l[0];  
+		float XPos2 = l[2];		
+		float detX = XPos2 - XPos1;//
+		middlepointX = XPos1 + detX / 2;
+
+#if(IMG_ANGLE_SHOW == 1)					
+		circle(imgOri, cv::Point2f(middlepointX, imgThresholded.rows), 1, CV_RGB(0, 244, 0), 2);		
+		imshow("OriginalCenterPoint", imgOri); //show the original image plus center point
+#endif
+
+#if(INFO_LEVEL_2_ON == 1)
+		cout << "CamXPos of center point;\t\t " << middlepointX << endl;
+#endif
+
+	}
+	return middlepointX;
+}
+
+/*
+int main (int argc, char *argv[])
+{
+	
+	time_t start,end;
+
+	//	 /**********              Calibration                 ********
+#if (CALIBRATION_ON == 1)	 
+	on_trackbar();
+#endif; 
+//	 	
+	////set height and width of capture frame, no effect
+	//cap.set(CV_CAP_PROP_FRAME_WIDTH,FRAME_WIDTH);
+	//cap.set(CV_CAP_PROP_FRAME_HEIGHT,FRAME_HEIGHT);
+
+
+	
+	//std::cout << std::endl << "---- Read Image ----" << std::endl << std::endl;
+
+#if(READ_DYNAMIC_FRAME == 0)
+	////*************************** A. from image file ********************************** //			
+	if(readImage(PICTURE)!=0) 	return -1;	
+#endif
+
+#if(READ_DYNAMIC_FRAME)
+	//*************************** OR B from video C from camera ********************************** /
+	//*********************											******************** /
+	// B. from recorded video file
+	VideoCapture cap( IMAGE_DIR_FILE );
+	//// C. from webcam	
+	//VideoCapture cap(0); // open the default camera 0
+		
+	cvWaitKey(20);
+	//system("pause");
+
+D(
+	if(!cap.isOpened()) // check if we succeeded
+	{	cout << "cannot open camera" << endl;
+		return -1;
+	}	
+
+);
+#endif
+	 //Start the clock, measure fps
+	time(&start);
+	int counter=0;
+     while (true)
+    {
+#if(READ_DYNAMIC_FRAME)
+		////case B-video,C-camera.store image to matrix, if failed return false		
+		bool bSuccess = cap.read(imgOri); // 		
+		cvWaitKey(10);
+         if (!bSuccess) //if not success, V1: break loop, V2: continue in case of video
+        {				
+			cap.set(CV_CAP_PROP_POS_AVI_RATIO , 0); 
+			continue;
+             //cout << "Cannot read a frame from video stream or video is over." << endl;
+			 //system("PAUSE");
+			 //break;
+             //return -1;
+        }
+#endif		 
+		//calculate fps
+		time(&end);
+		++counter;
+		double sec=difftime(end,start);
+		double fps=counter/sec;		
+		cout << "method 2:\t" << (int)fps << " fps" << endl;
+
+		// START TO PROCESS IMAGE
+		double t1 = (double)getTickCount();
+
+		imshow("Original", imgOri); 	//imgOri.cols
+		imgSrc = imgOri.clone();
+#if(READ_ROI == 1)
+		//
+		cout << "rows " << imgOri.rows << endl;
+		cv::Rect myROI(0, imgOri.rows*3/8, imgOri.cols, imgOri.rows*4/8); // rows top left point, bottom right point	
+		imgSrc = imgOri(myROI);//resize image
+		imshow("imgSrc",imgSrc);
+#endif	
+#if( CALIBRATION_ON == 1 )
+		preprocess(0,0); //generate img_gray
+#endif	
+		// Get requested information about detected pendulum
+		// Information could be only the coordinates of the two key points and/or the angle
+
+		// -----  Methode A: Use minRectangle  -----	
+
+		detectPendulumWithminRectangle(0, 0);//
+
+
+		// -----  Methode B: Use contour mass center -----  very slow and not precise
+		//detectPendulumWithMCenterP(0,0);
+
+
+		
+		// -----  Methode C: Use HoughLinesP P for probability-----  2 time faster and precise
+		//detectPendulumWithHoughLinesP(0,0);		
+
+		
+		//display the time for processing one frame
+		t1 = ((double)getTickCount() - t1)/getTickFrequency();
+		//cout << "Tick Frequency method 1:\t" << getTickFrequency() << " freqency" << endl;
+		std::cout << "\nProcessing Time:\t" << t1 << " s\n"<< std::endl;
+
+		//
+        if (waitKey(30) == 27) //wait for 'esc' key press for 30ms. If 'esc' key is pressed, break loop
+       {
+            cout << "esc key is pressed by user" << endl;
+            break; 
+       }
+    }
+
+	//system("PAUSE");
+	
+return 0;
+}
+*/
+
+
+
+angle.h
+#include <cstdio>
+#include <opencv2\opencv.hpp>
+#include <opencv\cv.h>
+#include "PowerCubeControl.h"
+using namespace std;
+using namespace cv;
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+//                 Set #define value to switch on/off outputs
+//
+#define GetDetY_ON 1 // set 1 to start temp cali process getting detY
+//switch trackbar function for HSV filter
+#define Trackbar_ON 0 //set 1 to start on-trackbar
+#if(Trackbar_ON == 1)
+//switch image output
+#define IMG_ANGLE_SHOW  1  //1-show result for angle measurement or coordinates, 0- off
+#define IMG_OTHERS_SHOW 1  //1-show all other images, 0- off
+#else
+//switch image output
+#define IMG_ANGLE_SHOW  0  //1-show result for angle measurement or coordinates, 0- off
+#define IMG_OTHERS_SHOW 0  //1-show all other images, 0- off
+#endif
+
+
+
+//switch message output
+#define INFO_LEVEL_0_ON 1  //LEVEL 0: system setup info
+#define INFO_LEVEL_2_ON 1  //LEVEL 2: only angle output
+#define INFO_LEVEL_3_ON 0  //LEVEL 3: detailed, picture size etc
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#define DEBUG_ENABLED true  // can use DoSomethingSlowWithTimeout(DEBUG_ENABLED? 5000 : 1000); to set diff timeout
+#ifdef  DEBUG_ENABLED
+#define DEBUG(x) do { x } while(0)
+#else
+#define DEBUG(x) do { } while(0)
+#endif
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+
+class CoordinateAngle
+{
+public:
+	CoordinateAngle(Mat imgOri, PowerCubeControl pc_ctrl);	
+	
+	void on_trackbar();
+	void preprocess_HSV();
+	void preprocess_morph();
+	void preprocess_CANY();
+
+	float detectPendulumPtrCP();
+	float detectPendulumPtrMC();
+	float detectPendulumPtrAngleSP();
+	float detectPendulumPtrAngleCP();
+	float detectPendulumPtrCP_PcubeAngle();//1a
+	float detectPendulumPtrAngleCP_cali();//4extra   
+
+	float detectPendulumWithCircles();
+	float detectPendulumWithCenterF();
+	float detectPendulumWithCenter();
+
+	void detectPendulumWithminRectangle();
+	void detectPendulumWithMCenterP();
+	float detectPendulumWithMCenterP2();
+
+	float detectPendulumWithHoughLinesP();
+	float detectPendulumWithHoughLinesPCenterPoint();
+	float detectPendulumWithHoughLinesP_HCP();
+	float analyseAngle(vector<float> anglev);
+
+	float calcAngle(float detX, float detY);
+	float calcPCubeImgDetY(float detX);
+
+	string intToString(int number);
+	void logger();
+	
+private:
+	
+	Mat imgOri;
+	PowerCubeControl pc_ctrl;
+};
+
+
+myframe.cpp
+#define _CRT_SECURE_NO_WARNINGS
+
+#include "MyFrameObserver.h"
+
+using namespace std;
+using namespace AVT::VmbAPI;
+
+
+MyFrameObserver::MyFrameObserver(CameraPtr pCamera, boolean showimg, PowerCubeControl pc_ctrl) :IFrameObserver(pCamera), showimg(showimg), pc_ctrl(pc_ctrl)
+            //     MyFrameObserver(CameraPtr pCamera, boolean showimg, PowerCubeControl pCtrl);
+{
+	lasttime = clock();
+	between = 0;
+	integral=0;
+}
+
+void MyFrameObserver::FrameReceived(const FramePtr pFrame)
+{
+	lasttime = clock(); 
+	cv::Mat source = framePtr2Mat(pFrame);
+	//cout << "Mat erstellt" << endl;
+	if (showimg)
+	{
+#if(IMG_OTHERS_SHOW == 1)
+		cv::imshow("erstes Bild-Asynchron", source);
+#endif
+
+#if(INFO_LEVEL_3_ON == 1)
+		cout << "imshow ausgefuehrt" << endl;
+#endif
+
+		cv::waitKey(1);
+	}
+	boolean out = false;
+	CoordinateAngle ca(source,pc_ctrl);
+
+#if(Trackbar_ON == 1)
+	ca.on_trackbar();
+	ca.preprocess_HSV();
+#endif
+		
+	//float angle=ca.detectPendulumWithHoughLinesP();
+	float angle=ca.detectPendulumPtrCP_PcubeAngle();
+
+	//ca.detectPendulumWithMCenterP2();
+	//ca.detectPendulumWithHoughLinesPCenterPoint();
+	//ca.detectPendulumWithHoughLinesP_HCP();
+
+	time = clock();
+	
+	//float xpos = pc_ctrl.getXPos();
+	
+	pc_ctrl.angle_PID_loop(angle);
+	
+	m_pCamera->QueueFrame(pFrame);
+
+#if(INFO_LEVEL_3_ON == 1)
+	cout << "QueueFrame ausgefuehrt" << endl;
+#endif
+
+
+	/*if (between < CLOCKS_PER_SEC / float(time - lasttime))
+	{
+		between = CLOCKS_PER_SEC / float(time - lasttime);
+		cout << "Zeit fuer FrameReceived: " << time - lasttime << endl;
+		cout << "das entspricht " << CLOCKS_PER_SEC / float(time - lasttime) << " fps" << endl;
+	}*/
+	//hy
+	between = CLOCKS_PER_SEC / float(time - lasttime);
+	if (between < 20 || between > 30)
+	{		
+		cout << "Zeit fuer FrameReceived; " << time - lasttime << endl;
+		cout << "das entspricht; \t" << between << " fps;" << endl;
+	}
+		
+
+
+}
+
+
+
+
+
+
+
+
+//typedef struct {
+//	float MAX;
+//	float kp, ki, kd;
+//	float prev_error, int_error;
+//	float output;
+//} PID;
+//void pid_setzero(PID* pid){
+//	pid->prev_error = 0;
+//	pid->int_error = 0;
+//}
+//void pid_update(PID* pid, float curr_error, float dt){
+//	float derivative;
+//	float p_term, i_term, d_term;
+//	pid->int_error += curr_error*dt;
+//	if(pid->int_error < -(pid->MAX)
+//		pid->int_error = -(pid->MAX;
+//	else if (pid->int_error > pid->MAX)
+//		pid->int_error = pid->MAX;
+//	derivative=(curr_error - pid->prev_error)/dt;
+//	p_term = pid->kp*curr_error;
+//	i_term = pid->ki*pid->int_error;
+//	d_term = pid->kd*derivative;
+//
+//	pid->output = p_term + i_term + d_term; 
+//	pid->prev_error = curr_error;
+//}
+
+
+cv::Mat MyFrameObserver::framePtr2Mat(FramePtr pFrame)
+{
+	VmbUchar_t *pImage = NULL;
+	VmbUint32_t fHeight, fWidth;
+	unsigned char* pCurSrc;
+	VmbErrorType err;
+	CameraPtr camera;
+	FeaturePtr pFeature;
+	float offset_x = 0;
+
+	//hy
+	err = camera->GetFeatureByName("OffsetX", pFeature);
+	offset_x = pc_ctrl.getXPos();
+	err = pFeature->SetValue(offset_x);
+	pCurSrc = (unsigned char*)pImage;
+	fWidth = 100;
+
+	//Converting FramePtr into cv::Mat
+	err = pFrame->GetImage(pImage);	
+	err = pFrame->GetHeight(fHeight);
+	err = pFrame->GetWidth(fWidth);
+
+#if(INFO_LEVEL_3_ON == 1)
+	cout << "Bildh鰄e: " << fHeight << endl;
+	cout << "Bildbreite: " << fWidth << endl;
+#endif
+	cv::Mat ret = cv::Mat(fHeight, fWidth, CV_8UC3, pCurSrc, (fWidth)* 3);
+
+	return ret;
+}
+
+
+myframe.h
+#ifndef MyFrameObserver_HEADER
+#define MyFrameObserver_HEADER
+
+#include <cstdio>
+#include <opencv2\opencv.hpp>
+#include "opencv\cv.h"
+#include "VimbaCPP\Include\VimbaCPP.h"
+
+#include "CoordinateAngle.h"
+#include "PowerCubeControl.h"
+
+using namespace AVT::VmbAPI;
+
+class MyFrameObserver : virtual public IFrameObserver
+{
+public:
+	MyFrameObserver(CameraPtr pCamera, boolean showimg, PowerCubeControl pc_ctrl);
+	virtual void FrameReceived(const FramePtr pFrame);
+	
+	cv::Mat framePtr2Mat(FramePtr pFrame);
+
+#define DEBUG_ENABLED true  // can use DoSomethingSlowWithTimeout(DEBUG_ENABLED? 5000 : 1000); to set diff timeout
+#ifdef DEBUG_ENABLED
+#define D(x) do { x } while(0)
+#else
+#define D(x) do { } while(0)
+#endif
+
+private:
+	boolean showimg;
+	clock_t time;
+	clock_t lasttime;
+	float between;
+	float integral;
+	PowerCubeControl pc_ctrl;
+	
+};
+#endif
