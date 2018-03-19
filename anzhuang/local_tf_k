@@ -37,8 +37,8 @@ if 'sudo -E pip install tensorflow' is entered, the most latest version will be 
 *     $sudo pip install tensorflow        #numpy included
 
 
-2.2 install keras for training c3d
-#keras
+2.2 install keras for training c3d #sudo chown -R $USER /usr/local/lib/python2.7 to enable access
+#keras version installed keras-2.1.5 (2.0.0 bu xing)
 *     $pip install keras
 *     $apt-get install libhdf5-dev -y
 *     $apt-get install python-h5py -y
