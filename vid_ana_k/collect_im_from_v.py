@@ -53,7 +53,7 @@ def collect_subclip_to_frames_rnd(vid,num_of_clips_to_gen,fps,V_FILE):
   clipsdata, label_clips, start_frames, offset_times, crop_size = [], [], [],[], 112
 
   for num in xrange(num_of_clips_to_gen):
-    rnd_frame_start = randint(0, len(vid) - clip_len)
+    rnd_frame_start = randint(0, len(vid) - clip_len - 1)
     start_frames.append(rnd_frame_start)  # 0x16,1x16
     offset_time = rnd_frame_start / fps
     offset_times.append(offset_time)
@@ -72,6 +72,10 @@ def collect_subclip_to_frames_rnd(vid,num_of_clips_to_gen,fps,V_FILE):
   return np_arr_data, np_arr_label_onehot
 
 def collect_train_data(num_of_clips_pro_class):
+  #T_dir[0] = '03_Dog_lover_knocks_out_a_dog_abuser637_T.mp4'
+  #F_dir[0] = '01_Classroom_management-Week10224_0244_F.mp4'
+  T_dir[0] = '04_Tschetschenischer_Tuersteher_185_202_T.mp4' #01_TschClubMBarGo_130_144_T
+  F_dir[0] = '01_Classroom_management-Week10224_0244_F.mp4'
   images_np, labels_np = collect_class_data(num_of_clips_pro_class,V_FILE = T_dir[0])
   #images_np2, labels_np2 = collect_class_data(num_of_clips_pro_class/2,V_FILE = T_dir[1])
 
@@ -85,10 +89,19 @@ def collect_train_data(num_of_clips_pro_class):
   return images_np, labels_np
 
 def collect_test_data(num_of_clips_pro_class):
+  test_pkg = 'A'
+  if test_pkg == 'A':
+    T_dir[1] = '04_Tschetschenischer_Tuersteher_140_147_T.mp4'
+    F_dir[1] = '01_UBahn-S_650_665_F.mp4'
+  if test_pkg == 'B':
+    T_dir[1] = '01_TschClubMBarGo_30_38_T.mp4'
+    F_dir[1] = '01_Classroom_management-Week10224_0244_F.mp4'
+
   images_np, labels_np = collect_class_data(num_of_clips_pro_class,V_FILE = T_dir[1])
-  images_np_2, labels_np_2 = collect_class_data(num_of_clips_pro_class,V_FILE = F_dir[1])
-  images_np = np.concatenate((images_np,images_np_2),axis=0)
-  labels_np = np.concatenate((labels_np,labels_np_2),axis=0)
+  images_np1, labels_np1 = collect_class_data(num_of_clips_pro_class,V_FILE = F_dir[1])
+  images_np = np.concatenate((images_np,images_np1),axis=0)
+  labels_np = np.concatenate((labels_np,labels_np1),axis=0)
+
   return images_np, labels_np
 
 def collect_class_data(num_of_clips_to_gen,V_FILE):
