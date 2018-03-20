@@ -13,7 +13,12 @@ smooth = 1.
 ordering = 'th'
 concat_axis = 3
 
-
+'''
+Original sources
+#https://handong1587.github.io/deep_learning/2015/10/09/segmentation.html
+#https://github.com/orobix/retina-unet/blob/master/src/retinaNN_training.py
+Further implemented by stu@yahoo.com, 2017
+'''
 # https://github.com/orobix/retina-unet/blob/master/src/retinaNN_training.py
 # def get_model(h,w):
 def segnet_arch_2c(dropouts, h, w):
