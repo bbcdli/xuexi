@@ -3647,15 +3647,16 @@ def add_bw_transparent_overlay(im_base,mask,alpha):
 
 def add_semi_transparent_overlay(im_base, mask):
   #PIL image, input can be cv2 image, it will be converted
-  new_mask_tr = Image.fromarray(mask)
-  fr_ = Image.fromarray(im_base)
-  fr_ = fr_.convert("RGBA")
+  #
+  PIL_mask = Image.fromarray(mask)
+  PIL_base = Image.fromarray(im_base)
+  PIL_base = PIL_base.convert("RGBA")
 
-  new_mask_tr.putalpha(128) 
-  new_mask_tr = new_mask_tr.convert("RGBA")
+  PIL_mask.putalpha(128) 
+  PIL_mask = PIL_mask.convert("RGBA")
 
-  fr_add_cont_tmp = Image.blend(fr_, new_mask_tr, 0.5)
-  fr_add_cont_tmp.save('tmp.png')
+  fr_add_cont = Image.blend(PIL_base, PIL_mask, 0.5)
+  fr_add_cont.save('semi_transparent.png')
 
 
 
