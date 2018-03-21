@@ -29,7 +29,6 @@ PROJ_DIR = '/home/hy/Documents/hy_dev/occupancy/'
 
 FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_integer("IMAGE_SIZE", "160", "input image size")
-#tf.flags.DEFINE_string('seg_model_search_p', os.path.join(PROJ_DIR, '/home/occupancy/testbench/1/'), "path to log file")
 tf.flags.DEFINE_string('seg_model_search_p', '/home/hy/Documents/hy_dev/occupancy/'+'/testbench/1/', "path to log file")
 tf.flags.DEFINE_string('save_res_path', os.path.join(PROJ_DIR, 'testbench/k_imgs/'), "path to save res images")
 tf.flags.DEFINE_bool('with_gt', "True", "test with ground truth: True/ False")  #
