@@ -3628,10 +3628,37 @@ def convert_img_for_tf(images_np, masks_np, h, w, train_mode=True, n_classes=1):
 	
 	return [total_images, digits]
 
-def add_colorOverlay(img_grayscale, mask):
-	colorOverlay = cv2.cvtColor(img_grayscale, cv2.COLOR_GRAY2RGB)
-	colorOverlay[:, :, 2] = mask
-	return colorOverlay
+
+def add_colorOverlay(im_base, mask):
+  #cv2 image
+  #fill the Blue channel (order 0,1,2) of im_base with mask
+  if len(im_base.shape) < 3:
+    im_base_new = cv2.cvtColor(im_base, cv2.COLOR_GRAY2RGB)
+  else:
+    im_base_new = im_base
+  if len(mask.shape) > 2:
+    mask = cv2.cvtColor(mask,cv2.COLOR_RGB2GRAY)
+  im_base_new[:, :, 2] = mask
+  return im_base_new
+
+def add_bw_transparent_overlay(im_base,mask,alpha):
+  #formula applied: im_base*alpha + mask*(1-alpha) + gama
+  gama = 0
+  overlay_res = cv2.addWeighted(im_base, alpha, mask, 1 - alpha, gama)
+
+def add_semi_transparent_overlay(im_base, mask):
+  #PIL image, input can be cv2 image, it will be converted
+  new_mask_tr = Image.fromarray(mask)
+  fr_ = Image.fromarray(im_base)
+  fr_ = fr_.convert("RGBA")
+
+  new_mask_tr.putalpha(128) 
+  new_mask_tr = new_mask_tr.convert("RGBA")
+
+  fr_add_cont_tmp = Image.blend(fr_, new_mask_tr, 0.5)
+  fr_add_cont_tmp.save('tmp.png')
+
+
 
 def calc_dice_simi(seg, gt, img_name, k=1):
 	# segmentation
