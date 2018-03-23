@@ -1,0 +1,117 @@
+
+
+#main.py
+import cv2
+import os
+import argparse
+import copy
+import numpy as np
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-v", "--video", help="input video file", required=True)
+parser.add_argument("-m", "--model", help="input model file", required=True)
+args = parser.parse_args()
+
+video_file = args.video
+if not os.path.exists(video_file):
+    raise IOError("Videofile does not exist!")
+
+cap = cv2.VideoCapture(video_file)
+sub_pix_win_size = (10, 10)
+win_size = (31, 31)
+max_points = 400
+need_to_init = True
+
+points1 = None
+points2 = None
+prev_gray_frame = None
+optical_flow_image = None
+
+haar_cascade = cv2.CascadeClassifier()
+haar_cascade.load(args.model)
+
+while True:
+    res, frame = cap.read()
+    w, h, c = frame.shape
+    optical_flow_image = np.zeros((w, h, 1), np.uint8)
+
+    if not res:
+        print("Can't grab frame!")
+        break
+
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    if need_to_init:
+        time_start = time.time()
+        points1 = cv2.goodFeaturesToTrack(gray_frame,
+                                          maxCorners=max_points,
+                                          qualityLevel=0.005,
+                                          minDistance=1,
+                                          blockSize=3,
+                                          useHarrisDetector=False,
+                                          k=0.04)
+        need_to_init = False
+    elif len(points2):
+        time_start = time.time()
+        points1 = cv2.goodFeaturesToTrack(gray_frame,
+                                          maxCorners=max_points,
+                                          qualityLevel=0.005,
+                                          minDistance=1,
+                                          blockSize=3,
+                                          useHarrisDetector=False,
+                                          k=0.04)
+
+        points1, status, err = cv2.calcOpticalFlowPyrLK(prev_gray_frame,
+                                                        gray_frame,
+                                                        points2,
+                                                        points1,
+                                                        winSize=win_size,
+                                                        maxLevel=3,
+                                                        criteria=(cv2.TERM_CRITERIA_MAX_ITER | cv2.TERM_CRITERIA_EPS, 20, 0.03),
+                                                        flags=0,
+                                                        minEigThreshold=0.001)
+
+        for p1, p2 in zip(points1, points2):
+            res = cv2.norm(p2 - p1)
+            if p1[0][0] - p2[0][0] > 0 and res > 1:
+                cv2.line(optical_flow_image, (p1[0][0], p1[0][1]), (p2[0][0], p2[0][1]), 255, 1, 1, 0)
+                cv2.line(frame, (p1[0][0], p1[0][1]), (p2[0][0], p2[0][1]), (0,0,255), 1, 1, 0)
+            else:
+                if res > 1:
+                    cv2.line(optical_flow_image, (p1[0][0], p1[0][1]), (p2[0][0], p2[0][1]), 255, 1, 1, 0)
+                    cv2.line(frame, (p1[0][0], p1[0][1]), (p2[0][0], p2[0][1]), (0, 0, 255), 1, 1, 0)
+
+        points1 = cv2.goodFeaturesToTrack(gray_frame,
+                                          maxCorners=max_points,
+                                          qualityLevel=0.005,
+                                          minDistance=1,
+                                          blockSize=3,
+                                          useHarrisDetector=False,
+                                          k=0.04)
+
+    hits = haar_cascade.detectMultiScale(optical_flow_image,
+                                         scaleFactor=1.03,
+                                         minNeighbors=1,
+                                         flags=0,
+                                         minSize=(5, 5),
+                                         maxSize=(250, 250))
+    if len(hits):
+        print(hits)
+        cv2.rectangle(frame, (hits[0][0], hits[0][1]), (hits[0][0]+hits[0][2], hits[0][1]+hits[0][3]), (255, 0, 0), 2)
+
+    time_end = time.time()
+    duration = time_end - time_start
+    if time_start > 0:
+      print 'time elapsed for finding feature and classification:',duration
+    points2 = copy.copy(points1)
+    prev_gray_frame = copy.copy(gray_frame)
+
+    cv2.imshow("demo", frame)
+    cv2.imshow("of", optical_flow_image)
+    key = cv2.waitKey(1)
+
+    if key & 0xFF == ord('q'):
+        break
+
+
+
