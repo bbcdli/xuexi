@@ -6,6 +6,14 @@ git commit -m ''
 git pull  #better check again
 git push   #if push to master (jia li shi de), bu yong xie master, bu zhi dao gai bu gai yong branch name
 
+#rename to sequence with fixed length of digits, using shell
+a=1
+for i in *.png; do
+  new=$(printf "%04d.png" "$a") #04 pad to length of 4
+  mv -i -- "$i" "$new"
+  let a=a+1
+done
+
 #add user to docker folder permission
 sudo chown "$USER":"$USER" /home/"$USER"/.docker -R
 sudo chmod g+rwx "/home/$USER/.docker" -R
