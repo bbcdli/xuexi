@@ -4,13 +4,12 @@
 import matplotlib
 matplotlib.use('Agg')
 from keras.models import model_from_json
+import keras.backend as K
 import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import c3d_keras_model as c3d_model
 import sys
-import keras.backend as K
 import time
 # import gizeh
 ##############################
@@ -25,7 +24,7 @@ LOG_ON = False
 PROJ_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_SIZE = 112
 NUM_CLASSES = 2
-CLIP_LENGTH = 4
+
 #os.path.dirname(os.path.abspath(__file__))
 # TEST_V_PATH = PROJ_DIR + 'test_videos/'
 #os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'templates'))
@@ -225,6 +224,7 @@ def eva_one_clip(X, vid_view,start_frame, model, EVA_SAVE_PATH_NO_AGGR,
  # get activations for intermediate layers if needed
  inspect = False
  if inspect:
+  import c3d_keras_model_newer as c3d_model
   inspect_layers = [
    #    'fc6',
    #    'fc7',
@@ -250,19 +250,19 @@ def eva_one_clip(X, vid_view,start_frame, model, EVA_SAVE_PATH_NO_AGGR,
  # EVA_SAVE_PATH = EVA_SAVE_PATH_NO_AGGR #setting save type
  v_str = os.path.splitext(os.path.basename(TEST_VIDEO))[0]
  clip_name = EVA_SAVE_PATH + v_str + '_' + str(start_frame) + '_' + "%.3f" % max_output + '.mp4'
- filename_f = EVA_SAVE_PATH + v_str + '_' + str(start_frame) + '_' + "%.3f" % max_output + '.jpg'
+ v_str = EVA_SAVE_PATH + v_str
  # pred_label = output[0].argmax()
  indx_of_interest = start_frame
  print 'index of interest:', indx_of_interest
 
 
- def save_current_subclips_to_frames(v_str):
-  for frame, i in zip(vid_view[start_frame:start_frame + CLIP_LENGTH], xrange(CLIP_LENGTH)):
-   filename_f_i = EVA_SAVE_PATH + 'eva_' + v_str + '_' + str(start_frame) + '_' + "%.3f" % max_output + str(
-    i) + '.png'
+ def save_current_subclips_to_frames(vid_view,v_str,start_frame):
+  for frame, i in zip(vid_view[0:CLIP_LENGTH],
+                      xrange(start_frame,start_frame + CLIP_LENGTH)):
+   filename_f_i = v_str +'fr_' + '%04d'%(i) + '.png'
+   #print filename_f_i
    cv2.imwrite(filename_f_i, frame)
-  # if max_output > 0.4:
-  #   save_current_subclips_to_frames()
+
 
 
  def save_start_frame_of_interest(vid_view, indx_of_interest, filename_f):
@@ -315,12 +315,13 @@ def eva_one_clip(X, vid_view,start_frame, model, EVA_SAVE_PATH_NO_AGGR,
   if index == 0:
    if i == gt_label:
     count_correct += 1
-    print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  top1  correct ', count_correct
+    print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  top1 p', count_correct
+    print 'frame index:',start_frame
    else:
-    print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  top1'
+    print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  top1 n'
   else:
    # print('{1}: {0:.5f}  other'.format(int(output[0][i]), labels_txt[i]))
-   print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  other'
+   print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  lower rank'
  return count_correct,pred_txt,top_inds[0],p
 
 def main(model_name):
@@ -432,8 +433,9 @@ if __name__ == '__main__':
   model_name = 'k_4_0314_05-0.26' + '.hdf5'
   #model_name = 'k_16_00000314_03-0.51best' + '.hdf5'
 
+  CLIP_LENGTH = int(model_name.split('_')[1]) # 16
   v_dirs = sorted([s for s in os.listdir(TEST_VIDEO_LOAD_PATH) if '.' in s
-   and ('01_UBahn_S_650_665_F' in s)])  # hyhy
+   and ('priv_F' in s)])  # hyhy
   # 01_fight_in_train_70_99_T
   # 03_Dog_lover_knocks_out_a_dog_abuser637_T.mp4
   # 2017-09-06_13.57.41.5.cam_55_4.event57_testF

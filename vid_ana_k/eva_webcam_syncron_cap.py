@@ -19,15 +19,15 @@ from moviepy.editor import *
 from moviepy.video.VideoClip import VideoClip
 from moviepy.Clip import Clip
 ##############################
-global LOG_ON,PROJ_DIR,NUM_CLASSES,CLIP_LENGTH,TEST_VIDEO_LOAD_PATH,TEST_VIDEOS
+global CLIP_LENGTH,INPUT_SIZE,gt_label_webcam,TEST_VIDEO
+global LOG_ON,PROJ_DIR,NUM_CLASSES,TEST_VIDEO_LOAD_PATH,TEST_VIDEOS
 global EVA_SAVE_PATH,EVA_SAVE_PATH_NO_AGGR,SAVE_RES_IMAGES
 LOG_ON = False
 PROJ_DIR = os.path.dirname(os.path.abspath(__file__))
+INPUT_SIZE = 112
 NUM_CLASSES = 2
 CLIP_LENGTH = 16
-SAVE_RES_IMAGES = True
-#os.path.dirname(os.path.abspath(__file__))
-# TEST_V_PATH = PROJ_DIR + 'test_videos/'
+SAVE_RES_IMAGES = False
 #os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'templates'))
 TEST_VIDEO_LOAD_PATH = os.path.join(PROJ_DIR,'..','aggr_vids/')#'/home/hy/Documents/aggr/aggr_vids/'
 #TEST_VIDEO_LOAD_PATH = '/media/sf_shared_win/vids/'
@@ -389,11 +389,10 @@ def main(model_name):
 
 if __name__ == '__main__':
   #model_name = 'k_01-0.46.hdf5'#offi
-  global INPUT_SIZE,gt_label_webcam,TEST_VIDEO
-  INPUT_SIZE = 112
   gt_label_webcam = '_'
   TEST_VIDEO = ''
   model_name = 'k_16_00000314_03-0.51best.hdf5'
-  main(model_name,)
+  CLIP_LENGTH = int(model_name.split('_')[1])  # 16
+  main(model_name)
 
 #https://www.youtube.com/watch?v=_q02y7UiFc0 #Tschetschenen stuermen Russischen Club "MBarGo"

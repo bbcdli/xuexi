@@ -2,7 +2,6 @@ import cv2
 import os,sys,time
 from random import randint
 import numpy as np
-import c3d_keras_model as c3d_model
 
 PROJ_DIR = os.path.dirname(os.path.abspath(__file__))
 V_READ_PATH = '/home/hy/Documents/hy_dev/aggr/aggr_vids/'
@@ -51,7 +50,7 @@ def collect_1_subclip_to_imgs(vid,clip_len,start_frame,crop_size,V_FILE):
   #tmp_label = 1 if '_T.' in V_FILE else 0
   return img_datas  # one pair:clip+label
 
-def collect_subclip_to_frames_rnd(vid,clip_len,input_size,num_of_clips_to_gen,fps,V_FILE,CLASS):
+def collect_subclip_to_frames_rnd(vid,clip_len,input_size,num_classes,num_of_clips_to_gen,fps,V_FILE,CLASS):
   clipsdata, label_clips, start_frames, offset_times, crop_size = [], [], [],[], input_size
 
   for num in xrange(num_of_clips_to_gen):
@@ -69,12 +68,12 @@ def collect_subclip_to_frames_rnd(vid,clip_len,input_size,num_of_clips_to_gen,fp
 
   np_arr_data = np.array(clipsdata).astype(np.float32)
   np_arr_label = np.array(label_clips).astype(np.int64)
-  np_arr_label_onehot = dense_to_one_hot(np_arr_label, c3d_model.NUM_CLASSES)
+  np_arr_label_onehot = dense_to_one_hot(np_arr_label, num_classes)
   print 'start frames:{}'.format(start_frames)
   #print 'offset_times:{:.6}'.format(offset_times)
   return np_arr_data, np_arr_label_onehot
 
-def collect_class_data(clip_len,input_size,num_of_clips_to_gen,V_FILE,CLASS):
+def collect_class_data(clip_len,input_size,num_classes,num_of_clips_to_gen,V_FILE,CLASS):
   print 'V_FILE:',V_FILE
   cap = cv2.VideoCapture(os.path.join(V_READ_PATH,V_FILE))
   fps = cap.get(cv2.cv.CV_CAP_PROP_FPS)
@@ -97,14 +96,14 @@ def collect_class_data(clip_len,input_size,num_of_clips_to_gen,V_FILE,CLASS):
   STOP = False
   while not STOP:
     np_arr_data, np_arr_label_onehot = \
-        collect_subclip_to_frames_rnd(vid,clip_len,input_size,num_of_clips_to_gen,fps,V_FILE,CLASS)
+        collect_subclip_to_frames_rnd(vid,clip_len,input_size,num_classes,num_of_clips_to_gen,fps,V_FILE,CLASS)
     print 'np_data shape:',np_arr_data.shape, ', vid len:',total_video_frames
     STOP = True
   cap.release()
 
   return np_arr_data, np_arr_label_onehot
 
-def collect_train_data(clip_len,input_size,num_of_clips_pro_class):
+def collect_train_data(clip_len,input_size,num_classes,num_of_clips_pro_class):
   T_dir[0] = 'LatinKingsvsTangoBlastHoustone.mp4'#'03_Dog_lover_knocks_out_a_dog_abuser637_T.mp4'
   F_dir[0] = '01_Classroom_management_Week10224_0244_F.mp4'
 
@@ -115,7 +114,7 @@ def collect_train_data(clip_len,input_size,num_of_clips_pro_class):
   F_dir[2] = '04_Tweety im Zug_29_49_F.mp4'
 
   T_dir[3] = '01_TschClubMBarGo_415_444_T.mp4'
-  F_dir[3] = '03_Tweety im Zug119_132_F.mp4'
+  F_dir[3] = 'priv_F.mp4'
 
   T_dir[4] = '01_fight_in_train_70_99_T.mp4'
   F_dir[4] = '01_UBahn_S_650_665_F.mp4'
@@ -126,19 +125,19 @@ def collect_train_data(clip_len,input_size,num_of_clips_pro_class):
   num_of_clips1, num_of_clips2, num_of_clips3,num_of_clips4,num_of_clips5\
     = 64, 24,8,64,20 #40, 24, 8,40
   total_vids = 5
-  images_np, labels_np = collect_class_data(clip_len,input_size,num_of_clips1,
+  images_np, labels_np = collect_class_data(clip_len,input_size,num_classes,num_of_clips1,
     V_FILE = T_dir[0],CLASS=1)
 
-  images_np_f1, labels_np_f1 = collect_class_data(clip_len,input_size,int(num_of_clips_pro_class/total_vids),
+  images_np_f1, labels_np_f1 = collect_class_data(clip_len,input_size,num_classes,int(num_of_clips_pro_class/total_vids),
     V_FILE = F_dir[0],CLASS=0)
 
   images_np = np.concatenate((images_np, images_np_f1), axis=0)
   labels_np = np.concatenate((labels_np, labels_np_f1), axis=0)
   #########################################################
-  images_np2, labels_np2 = collect_class_data(clip_len,input_size,num_of_clips2,
+  images_np2, labels_np2 = collect_class_data(clip_len,input_size,num_classes,num_of_clips2,
     V_FILE = T_dir[1],CLASS=1)
 
-  images_np_f2, labels_np_f2 = collect_class_data(clip_len,input_size, int(num_of_clips_pro_class/total_vids),
+  images_np_f2, labels_np_f2 = collect_class_data(clip_len,input_size,num_classes,int(num_of_clips_pro_class/total_vids),
     V_FILE = F_dir[1],CLASS=0)
 
   images_np = np.concatenate((images_np, images_np2), axis=0)
@@ -148,11 +147,11 @@ def collect_train_data(clip_len,input_size,num_of_clips_pro_class):
   labels_np = np.concatenate((labels_np,labels_np_f2), axis=0)
   #########################################################
 
-  images_np3, labels_np3 = collect_class_data(clip_len,input_size,
+  images_np3, labels_np3 = collect_class_data(clip_len,input_size,num_classes,
               num_of_clips3,
               V_FILE=T_dir[2], CLASS=1)
 
-  images_np_f3, labels_np_f3 = collect_class_data(clip_len,input_size,
+  images_np_f3, labels_np_f3 = collect_class_data(clip_len,input_size,num_classes,
               int(num_of_clips_pro_class /total_vids),
               V_FILE=F_dir[2], CLASS=0)
 
@@ -162,11 +161,11 @@ def collect_train_data(clip_len,input_size,num_of_clips_pro_class):
   images_np = np.concatenate((images_np, images_np_f3), axis=0)
   labels_np = np.concatenate((labels_np, labels_np_f3), axis=0)
   #########################################################
-  images_np4, labels_np4 = collect_class_data(clip_len,input_size,
+  images_np4, labels_np4 = collect_class_data(clip_len,input_size,num_classes,
               num_of_clips4,
               V_FILE=T_dir[3], CLASS=1)
 
-  images_np_f4, labels_np_f4 = collect_class_data(clip_len,input_size,
+  images_np_f4, labels_np_f4 = collect_class_data(clip_len,input_size,num_classes,
               int(num_of_clips_pro_class /total_vids),
               V_FILE=F_dir[3], CLASS=0)
 
@@ -178,11 +177,11 @@ def collect_train_data(clip_len,input_size,num_of_clips_pro_class):
   labels_np = np.concatenate((labels_np, labels_np_f4), axis=0)
   #########################################################
 
-  images_np5, labels_np5 = collect_class_data(clip_len,input_size,
+  images_np5, labels_np5 = collect_class_data(clip_len,input_size,num_classes,
               num_of_clips5,
               V_FILE=T_dir[4], CLASS=1)
 
-  images_np_f5, labels_np_f5 = collect_class_data(clip_len,input_size,
+  images_np_f5, labels_np_f5 = collect_class_data(clip_len,input_size,num_classes,
               int(num_of_clips_pro_class / total_vids),
               V_FILE=F_dir[4], CLASS=0)
 
@@ -195,13 +194,13 @@ def collect_train_data(clip_len,input_size,num_of_clips_pro_class):
 
   return images_np, labels_np
 
-def collect_test_data(clip_len,input_size,num_of_clips_pro_class):
+def collect_test_data(clip_len,input_size,num_classes,num_of_clips_pro_class):
   T_dir = '04_Tschetschenischer_Tuersteher_140_147_T.mp4'
   F_dir = '04_Tweety im Zug_29_49_F.mp4'
 
-  images_np, labels_np = collect_class_data(clip_len,input_size,num_of_clips_pro_class,
+  images_np, labels_np = collect_class_data(clip_len,input_size,num_classes,num_of_clips_pro_class,
                                             V_FILE = T_dir,CLASS=1)
-  images_np_f1, labels_np_f1 = collect_class_data(clip_len,input_size,num_of_clips_pro_class,
+  images_np_f1, labels_np_f1 = collect_class_data(clip_len,input_size,num_classes,num_of_clips_pro_class,
                                               V_FILE = F_dir,CLASS=0)
 
   images_np = np.concatenate((images_np,images_np_f1),axis=0)

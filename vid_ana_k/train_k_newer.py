@@ -196,16 +196,13 @@ def train(MAX_ITERATION, learning_rate, dropouts,model_path, model_name,log_LABE
   else:
     import collect_im_from_v as cimv
     train_images, train_labels = cimv.collect_train_data(
-      c3d_model.NUM_FRAMES_PER_CLIP,c3d_model.INPUT_IMAGE_SIZE,num_of_clips_pro_class)
+      c3d_model.NUM_FRAMES_PER_CLIP,c3d_model.INPUT_IMAGE_SIZE,c3d_model.NUM_CLASSES,num_of_clips_pro_class)
 
     images_t, labels_t = cimv.collect_test_data(
-      c3d_model.NUM_FRAMES_PER_CLIP,c3d_model.INPUT_IMAGE_SIZE,num_of_clips_pro_class=8)
+      c3d_model.NUM_FRAMES_PER_CLIP,c3d_model.INPUT_IMAGE_SIZE,c3d_model.NUM_CLASSES,num_of_clips_pro_class=8)
   model = c3d_model.get_model_3l(dropouts,summary=True, backend=backend)
-  model_dir = os.path.join(PROJ_DIR, 'log_models/')
-  if not os.path.exists(model_dir):
-    os.makedirs(model_dir)
   if 'con' in train_mode:
-    model_weight_filename = os.path.join(model_dir, model_name)
+    model_weight_filename = os.path.join(model_path, model_name)
     if os.path.exists(model_weight_filename):
       model.load_weights(model_weight_filename)
       print 'continued training, following',model_name
@@ -233,7 +230,7 @@ def main():
   MAX_ITERATION = 10
   learning_rate = 0.00000314#0.000000000015 #0.0000003  # 0.000003
   dropouts = [0.38,0.45,0.5,0.35]
-  model_name = 'k_4_0314_09-0.33_not_stable.hdf5'
+  model_name = 'k_4_0314_05-0.26.hdf5'
   #model_name = 'k_16_0314_03-0.51.hdf5'
   model_path = os.path.join(PROJ_DIR, 'log_models/')
   if not os.path.exists(model_path): 
