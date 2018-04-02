@@ -1,0 +1,8 @@
+#bat add message box pop up
+MessageBox(NULL,"text","!!!",MB_OK);
+
+echo off
+mode con cols=100 lines=2
+:loop
+title %DATA% %TIME%
+goto loop

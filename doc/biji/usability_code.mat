@@ -1,0 +1,160 @@
+cd 'd:\....'
+close all; clear all; clc;
+global test_values;
+global VP
+global table;
+Audio_path='...'
+VP.FOLDER='...'
+%%
+answ=(inputdlg('verspNr '));
+vpn=str2double(answ{:});
+time = clock;
+VP.name = ['VP_' num2str(vpn) '_' num2str(time(1)) '_' num2str(time(2)) '_'... num2str(time(5))
+VP.BEWERTUNG = [VP.FOLDER'datarating_' VP.name '.mat'];
+fprintf('Enter "dbcont" to start \n');
+keyboard
+%% Load Audiofiles
+files = dir([AUDIO_path'*.wav']);
+%%Probedurchlauf
+%show grey screen
+handle = gray;
+set(handle, 'position', [0 0 336.000 79.07693]);
+%10 SNR Hintergrundgeräusch
+%3er Skala
+current_file = files(20).name;
+[stimulus,fs] = wavread([AUDIO_path current_file]);
+player = audioplayer(stimulus.fs);
+play(player)
+pause(length(stimulus)/fs)
+h = S_N_G_trial;
+uiwait(h);
+%kein Hintergrundgeräusch
+current_file = files(43).name;
+[stimulus,fs] = wavread([AUDIO_path current_file]);
+player = audioplayer(stimulus.fs);
+play(player)
+pause(length(stimulus)/fs)
+h = G_S_N_trial;
+uiwait(h);
+%30 SNR Hintergrundgeräusch, Abfrage H: -- Skala
+current_file = files(58).name;
+[stimulus,fs] = wavread([AUDIO_path current_file]);
+player = audioplayer(stimulus.fs);
+play(player)
+pause(length(stimulus)/fs)
+h = Noise_trial;
+uiwait(h);
+close(handle);
+fprintf('....\n')
+keyboard
+%%Experiment
+scales = randperm(5);
+VP.scales = scales;
+VP.fileanzahl = numel(files);
+table = zeros(VP.fileanzahl,1);
+for scale = 1:5
+  pause(2)
+  current_scale = scales(scale);
+  sequence = randperm(numel(files));
+  VP.fileorder(scale,:) = sequence;
+  %show grey screen during audio playback
+  handle = grey;
+  set(handle,'position',[0 0 336.000 79.0769]);
+  for stim = 1:numel(files)
+    fprintf('AndioDatei: %d/%d \n',stim,numel(files))
+    %Hide mouse cursor
+    %set(0, 'PointerLocation',[1920 1080])
+    %get the current file and play
+    current_file = files(sequence(stim).name;
+    [stimulus,fs] = wavread([AUDIO_path current_file]);
+    player = audioplayer(stimulus,fs);
+    play(player)
+    pause(length(stimulus/fs))
+    VP.index = stim;
+    VP.filenumber = sequence(stim);
+    VP.scale = current_scale;
+    test_values(stim,current_scale).index = stim;
+    test_values(stim,current_scale).file = current_file;
+    %after playing show rating of corresponding scale (see detailed func in the end)
+    rating(stim,current_scale);
+  end #for
+  close(handle)
+  if (scale == 5)
+    fprintf('The experiment is finished.\n');
+  else
+    fprintf('Block %d from 5 is completed. Enter "dbcout" to continue \n');
+    keyboard
+  end #if
+end #for
+table = table ';
+save([VP.FOLDER VP.name '1.mat'],'test_values','vp');
+save([VP.FOLDER VP.name '2.mat'],'table');
+%%xls write([VP.FOLDER VP.name '_sheet.xls'],table);
+end
+
+function rating(index,scale)
+global test_values;
+switch scale
+  case 1
+    handle1 = Noise;
+    uiwait(handle1);
+    usedscale = 1
+  case 2
+    handle2 = Signal;
+    uiwait(handle2);
+    usedscale = 2
+  case 3
+    handle3 = Gesamt;
+    uiwait(handle3);
+    usedscale = 3
+  case 4
+    if (rand < 0.5)
+      handle4 = G_N_S;
+      uiwait(handle4);
+      usedscale = 4
+    else
+      handle4 = G_S_N;
+      uiwait(handle5);
+      usedscale = 5;
+    end
+  case 5
+    if (rand < 0.5)
+      handle6 = N_S_G;
+      uiwait(handle6);
+      usedscale = 6;
+    else
+      handle7 = S_N_G;
+      uiwait(handle7);
+      usedscale = 7;
+    end
+  end
+  test_values(index,scale);
+  scale = usedscale
+end
+
+Variable
+AUDIO_path
+VP <1x1 struct
+answ <1x1 cell
+current_file '..
+files <72x1 struct
+fs 16000
+h 174.1368
+handle 173.1366
+player <1x1 andio
+stimulus <145197
+table []
+test_values []
+time [20416, 26..
+vpn 11
+
+#not fin see note3
+
+    uiwait(handle1);
+    usedscale = 1
+
+  case 1
+    handle1 = Noise
+    uiwait(handle1);
+    usedscale = 1
+    
