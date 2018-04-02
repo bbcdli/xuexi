@@ -104,14 +104,14 @@ def collect_class_data(clip_len,input_size,num_classes,num_of_clips_to_gen,V_FIL
   return np_arr_data, np_arr_label_onehot
 
 def collect_train_data(clip_len,input_size,num_classes,num_of_clips_pro_class):
-  T_dir[0] = 'LatinKingsvsTangoBlastHoustone.mp4'#'03_Dog_lover_knocks_out_a_dog_abuser637_T.mp4'
-  F_dir[0] = '01_Classroom_management_Week10224_0244_F.mp4'
+  T_dir[0] = 'LatinKingsvsTangoBlastHoustone_T.mp4'#'03_Dog_lover_knocks_out_a_dog_abuser637_T.mp4'
+  F_dir[0] = '04_879_38_l_good_F.mp4' #classroom(480)
 
   T_dir[1] = '04_Tschetschenischer_Tuersteher_185_202_T.mp4' #01_TschClubMBarGo_130_144_T
   F_dir[1] = '01_UBahn_S_485_498_F.mp4'
 
   T_dir[2] = '01_TschClubMBarGo_130_144_T.mp4'  # 01_TschClubMBarGo_130_144_T
-  F_dir[2] = '04_Tweety im Zug_29_49_F.mp4'
+  F_dir[2] = '04_Tweety_im_Zug_29_49_F.mp4'
 
   T_dir[3] = '01_TschClubMBarGo_415_444_T.mp4'
   F_dir[3] = 'priv_F.mp4'
@@ -121,9 +121,9 @@ def collect_train_data(clip_len,input_size,num_classes,num_of_clips_pro_class):
 
   #
   #TschClubMBarGo_30_38_T
-
+  # 600,480,  425,325,  350,400,  725,480,  869,375
   num_of_clips1, num_of_clips2, num_of_clips3,num_of_clips4,num_of_clips5\
-    = 64, 24,8,64,20 #40, 24, 8,40
+    = 74, 24, 18, 64, 40 #40, 24, 8,40
   total_vids = 5
   images_np, labels_np = collect_class_data(clip_len,input_size,num_classes,num_of_clips1,
     V_FILE = T_dir[0],CLASS=1)
@@ -166,7 +166,7 @@ def collect_train_data(clip_len,input_size,num_classes,num_of_clips_pro_class):
               V_FILE=T_dir[3], CLASS=1)
 
   images_np_f4, labels_np_f4 = collect_class_data(clip_len,input_size,num_classes,
-              int(num_of_clips_pro_class /total_vids),
+              int(num_of_clips_pro_class/total_vids),
               V_FILE=F_dir[3], CLASS=0)
 
   images_np = np.concatenate((images_np, images_np4), axis=0)
@@ -195,8 +195,9 @@ def collect_train_data(clip_len,input_size,num_classes,num_of_clips_pro_class):
   return images_np, labels_np
 
 def collect_test_data(clip_len,input_size,num_classes,num_of_clips_pro_class):
+  #175,400,  200,240
   T_dir = '04_Tschetschenischer_Tuersteher_140_147_T.mp4'
-  F_dir = '04_Tweety im Zug_29_49_F.mp4'
+  F_dir = 'priv_F.mp4'
 
   images_np, labels_np = collect_class_data(clip_len,input_size,num_classes,num_of_clips_pro_class,
                                             V_FILE = T_dir,CLASS=1)
@@ -207,11 +208,11 @@ def collect_test_data(clip_len,input_size,num_classes,num_of_clips_pro_class):
   labels_np = np.concatenate((labels_np,labels_np_f1),axis=0)
 
   T_dir = 'TschClubMBarGo_30_38_T.mp4'
-  F_dir = '02_Tweety im Zug105_115_F.mp4'
+  F_dir = '02_Tweety_im_Zug105_115_F.mp4'
 
-  images_np2, labels_np2 = collect_class_data(clip_len,input_size, num_of_clips_pro_class,
+  images_np2, labels_np2 = collect_class_data(clip_len,input_size,num_classes,num_of_clips_pro_class,
                                             V_FILE=T_dir, CLASS=1)
-  images_np_f2, labels_np_f2 = collect_class_data(clip_len,input_size, num_of_clips_pro_class,
+  images_np_f2, labels_np_f2 = collect_class_data(clip_len,input_size,num_classes,num_of_clips_pro_class,
                                                   V_FILE=F_dir, CLASS=0)
 
   images_np = np.concatenate((images_np, images_np2), axis=0)

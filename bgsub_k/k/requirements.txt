@@ -1,0 +1,4 @@
+keras==1.2.2
+tflearn
+python-h5py
+libhdf5-dev

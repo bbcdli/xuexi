@@ -1,7 +1,7 @@
 #c3d_keras_model.py
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Flatten
-from keras.layers.convolutional import Convolution3D, MaxPooling3D, ZeroPadding3D
+from keras.layers.convolutional import Convolution3D, MaxPooling3D, ZeroPadding3D,Conv3D
 from keras.optimizers import SGD
 '''
 dim_ordering issue:
@@ -9,7 +9,7 @@ dim_ordering issue:
 - 'tf'-style dim_ordering: [batch, depth, height, width, channels]
 '''
 NUM_CLASSES = 2
-NUM_FRAMES_PER_CLIP = 4
+NUM_FRAMES_PER_CLIP = 16
 INPUT_IMAGE_SIZE = 112
 def get_model(summary=False, backend='tf'):
     """ Return the Keras model of the network
@@ -95,6 +95,40 @@ def get_model_3l(dropouts,summary=False, backend='tf'):
   model.add(Dense(128, activation='relu', name='fc6'))
   model.add(Dropout(dropouts[2]))
   model.add(Dense(128, activation='relu', name='fc7'))
+  model.add(Dropout(dropouts[3]))
+  model.add(Dense(NUM_CLASSES, activation='softmax', name='fc8'))
+  if summary:
+    print(model.summary())
+  return model
+
+def get_model_3l_k2API(dropouts,summary=False, backend='tf'):
+  """ Return the Keras model of the network
+  """
+  model = Sequential()
+  pads,padv, act = "same","valid","relu"
+  if backend == 'tf':
+    input_shape = (NUM_FRAMES_PER_CLIP, INPUT_IMAGE_SIZE, INPUT_IMAGE_SIZE, 3)  # l, h, w, c
+  else:
+    input_shape = (3, NUM_FRAMES_PER_CLIP, INPUT_IMAGE_SIZE, INPUT_IMAGE_SIZE)  # c, l, h, w
+  model.add(Conv3D(4, (3, 3, 3), padding=pads,activation=act,input_shape=input_shape,name='conv1'))
+  model.add(MaxPooling3D(padding=padv,strides=(1, 2, 2),pool_size=(1, 2, 2),name='pool1'))
+  model.add(Dropout(dropouts[0]))
+  # 2nd layer group
+  model.add(Conv3D(12, (3, 3, 3),padding=pads,activation=act,name='conv2'))
+  model.add(MaxPooling3D(padding=padv,strides=(2, 2, 2),pool_size=(2, 2, 2),
+                         name='pool2'))
+  model.add(Dropout(dropouts[1]))
+  # 3rd layer group
+  model.add(Conv3D(40, (3, 3, 3),padding=pads,activation=act,name='conv3a'))
+  model.add(Conv3D(40, (3, 3, 3),padding=pads,activation=act,name='conv3b'))
+  model.add(ZeroPadding3D(padding=((0, 0), (0, 1), (0, 1)), name='zeropad3'))
+  model.add(MaxPooling3D(padding=padv,strides=(2, 2, 2),pool_size=(2, 2, 2),
+                          name='pool3'))
+  model.add(Flatten())
+  # FC layers group
+  model.add(Dense(128, activation=act, name='fc6'))
+  model.add(Dropout(dropouts[2]))
+  model.add(Dense(128, activation=act, name='fc7'))
   model.add(Dropout(dropouts[3]))
   model.add(Dense(NUM_CLASSES, activation='softmax', name='fc8'))
   if summary:

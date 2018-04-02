@@ -655,7 +655,7 @@ if 'train' in FLAGS.mode or 'visualize' in FLAGS.mode:
 # if __name__ == "__main__":#
 #	tf.app.run()
 
-#wang
+#wang_jie_gou
 import tensorflow as tf
 import numpy as np
 import tflearn

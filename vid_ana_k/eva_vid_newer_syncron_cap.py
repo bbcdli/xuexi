@@ -185,7 +185,13 @@ def demo(frame,pred_txt,pred_label, confidence):#pred_txt,pred_label, gt_label
 def collect_gt_labels(vid_file, gt_file):
  fname, _ = os.path.splitext(os.path.basename(vid_file))
  with open(gt_file, 'r') as f:
-  gt_label_txt = [line.strip() for line in f.readlines() if fname in line][0]
+  gt_label_txt = [line.strip() for line in f.readlines() if fname in line]
+  if not gt_label_txt:
+   print 'empty line',gt_label_txt
+   return []
+
+  gt_label_txt = gt_label_txt[0]
+  print 'line',gt_label_txt
   gt_label_txt = gt_label_txt.split(' ', 1)[1]
   gt_label_list = gt_label_txt.split()
   if not gt_label_list:
@@ -315,10 +321,10 @@ def eva_one_clip(X, vid_view,start_frame, model, EVA_SAVE_PATH_NO_AGGR,
   if index == 0:
    if i == gt_label:
     count_correct += 1
-    print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  top1 p', count_correct
+    print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  pass', count_correct
     print 'frame index:',start_frame
    else:
-    print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  top1 n'
+    print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  false alarm'
   else:
    # print('{1}: {0:.5f}  other'.format(int(output[0][i]), labels_txt[i]))
    print labels_txt[i], ': {:0.4f}'.format(output[0][i]), '  lower rank'
@@ -426,16 +432,28 @@ def main(model_name):
  print 'last frame_i',frame_i,'vid len:',vid_len
  print 'gt_labels:(len:',len(gt_frame_labels),') ',gt_frame_labels
  print 'pred_labels:(len:',len(pred_labels),') ',pred_labels
+
+ def calc_dice(gt_frame_labels,pred_labels):
+  min_len = min(len(gt_frame_labels),len(pred_labels))
+  score = 0
+  for i in xrange(min_len):
+    if gt_frame_labels[i] == pred_labels[i]:
+     score +=1
+  print '2*score:',2.0*score
+  score = 2.0*score/(len(gt_frame_labels) + len(pred_labels))
+  return score
+ score = calc_dice(gt_frame_labels,pred_labels)
+ print 'dice:',score
  print 'TEST end.'
 
 if __name__ == '__main__':
   #model_name = 'k_01-0.46.hdf5'#offi
-  model_name = 'k_4_0314_05-0.26' + '.hdf5'
+  model_name = 'k_16_03_06-0.11' + '.hdf5'
   #model_name = 'k_16_00000314_03-0.51best' + '.hdf5'
 
   CLIP_LENGTH = int(model_name.split('_')[1]) # 16
   v_dirs = sorted([s for s in os.listdir(TEST_VIDEO_LOAD_PATH) if '.' in s
-   and ('priv_F' in s)])  # hyhy
+   and ('04_Tschetschenischer_Tuersteher_140_147_T' in s)])  # hyhy
   # 01_fight_in_train_70_99_T
   # 03_Dog_lover_knocks_out_a_dog_abuser637_T.mp4
   # 2017-09-06_13.57.41.5.cam_55_4.event57_testF
