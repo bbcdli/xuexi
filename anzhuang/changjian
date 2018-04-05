@@ -6,6 +6,8 @@ git commit -m ''
 git pull  #better check again
 git push   #if push to master (jia li shi de), bu yong xie master, bu zhi dao gai bu gai yong branch name
 
+only integer scalar arrays can be converted to a scalar index: check np.concatenate format, should be ((),axis=a_num)
+
 #rename to sequence with fixed length of digits, using shell
 a=1
 for i in *.png; do

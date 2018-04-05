@@ -23,13 +23,12 @@ non-network local connections being removed from access control list (zhi qian t
 access xian zai guan shang le)
 
 The complete docker run command ruxia:
-docker run --name occupancy -u `id -u` -it -v /home/hy/.Xauthority:/home/hy/.Xauthority 
--v /tmp/.X11-unix:/tmp/.X11-unix -v /etc/localtime:/etc/localtime:ro -e DISPLAY 
--v `pwd`:/home/occupancy/ -p 8008:8008 -w /home/occupancy/ docker_occ /bin/bash
-
 docker run --name occupancy -it -v /home/hy/.Xauthority:/home/hy/.Xauthority 
 -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY -v `pwd`:/home/occupancy/ 
 -p 8008:8008 -w /home/occupancy/ docker_occ /bin/bash
+
+#result:'I have no name!'
+docker run --name caffev1_1 -u `id -u` -it -v /home/hy/.Xauthority:/home/hy/.Xauthority -v /tmp/.X11-unix:/tmp/.X11-unix -v /etc/localtime:/etc/localtime:ro -e DISPLAY -v `pwd`:/home/ -p 8008:8008 -w /home/ mymod/aggrcaff:v1.1 /bin/bash
 
 Jieshi
 --name occupancy : give a name for the container
