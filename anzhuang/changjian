@@ -16,6 +16,9 @@ for i in *.png; do
   let a=a+1
 done
 
+#activate keyboard backlit on DELL
+hold fn and press right arrow
+
 #add user to docker folder permission
 sudo chown "$USER":"$USER" /home/"$USER"/.docker -R
 sudo chmod g+rwx "/home/$USER/.docker" -R
