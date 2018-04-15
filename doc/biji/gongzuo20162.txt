@@ -1,0 +1,44 @@
+https//arxiv.org/pdf/1512.00567.pdf
+doubling Nr of filter leads to 4 times increase in both computational cost and the number of parameters.
+
+Principles provved to be useful
+
+2Jun2016
+. Normalization for confusion matrix
+. parameter: meaning of hidden layer
+set display precision
+import numpy as np
+np.set_printoptions(precision=2)
+print (matrix_A)
+
+Assigned training
+1. GM: Dienstreisen, Technologietransfer versand/Empfang
+2. SCM: Kaufverträge mit ext. Lieferanten, Einkaufsklausel is required
+3. CRM: potencial partner must be geprüft, ob sie unkritisch sind
+4. PLM: Ausgangsmaterialien, SW, Technologie must provide export regulation.
+5. PM@sieme:
+
+iCCTV SPA DE3
+- Erkennung der Belegung von Sitzplätzen
+- Erkenneng der Belegung von Rollstuhlplätzen
+- Detektion von Aggression Verhalten 
+sollen in sep auf der Innotrans demonstriert werden
+
+zugfahrt im "blauen Desiro" am Donnestag nächster Woche (16.Jun) Die Fahrt geht ungefähr von 9-16Uhr und wird als Arbeitszeit angerechnet. Voraussetzung ist die Einwilligung, dass dabei Video aufnahmen durch CCTVcameras erstellt werden und idese für unsere entwicklungszwecke gespeichert und verwendet werden. 
+Weitere Voraussetzung ist das Einverständnis des jeweiligen Betreuers oder Abteilungsleiters, bitte Rücksprache halten!
+
+Das Projeckt entweickelt intelligente videoanalysealgorithmen für CCTV (Überwachungs)kameras im Inneren von Zügen. Wir kontentrieren uns aktuell auf 3 Anwendungen:
+-
+-
+-
+wir werden uns dieses Mal besonders auf das "aggressive Verhalten" Konzentrieren, weil dies auch für unsere potentiellen Kunden von großen Interesse ist. Wir werden schreien und auf einen luftgefüllten Punchingball einschlagen.
+Bitte meldet Euch zahlreich bei ..@...com.
+Die Dienstreise-Anmeldung und Abrechnung wird zentral organisiert. Details foolgen.
+MfG
+Dr.
+
+
+
+12333
+
+

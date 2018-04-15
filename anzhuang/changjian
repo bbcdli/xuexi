@@ -61,6 +61,9 @@ tar -czvf archive.tar.gz /home/ubuntu --exclude=*.mp4    #compress, exclude some
 remove system error report
 $sudo rm /var/crash/*
 
+in ubuntu, type first several characters and "tab", a list of files can be displayed.
+
+
 when var.. is locked first check if using pip or apt-get install which is the right one, apt-get update, if not work, do following 
 *     $sudo rm /var/lib/apt/lists/lock
 *     $sudo rm /var/cache/apt/archives/lock
