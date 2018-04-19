@@ -1,3 +1,20 @@
+#without x11,can run train
+#docker run --name caffev1_1 -u `id -u` -it -v /home/hy/.Xauthority:/home/hy/.Xauthority -v /tmp/.X11-unix:/tmp/.X11-unix -v /etc/localtime:/etc/localtime:ro -e DISPLAY -v `pwd`:/home/ -p 8008:8008 -w /home/ mymod/aggrcaff:v1.1 /bin/bash
+
+#with x11,can also run eva, so -v aggr_vids is required
+docker run --name caffev1_1 -it -v /home/hy/.Xauthority:/home/hy/.Xauthority -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY -v `pwd`:/home/c3d_keras/ -v `pwd`/../aggr_vids/:/home/aggr_vids/ -p 8008:8008 -w /home/c3d_keras/ mymod/aggrcaff:v1.1 /bin/bash
+
+docker start caffev1_1
+docker attach caffev1_1
+
+///
+mymod/aggrcaff      v1.1                a5631dd5bfa9        5 weeks ago         2.68GB
+mymod/aggrcaff      v1                  628a7cb02a78        5 weeks ago         2.07GB
+bvlc/caffe          cpu                 9775f42fc642        5 weeks ago         1.65GB
+
+///
+
+##################
 git branch -a
 git status
 git pull
