@@ -14,9 +14,9 @@ import time
 # import gizeh
 ##############################
 # hy for saving video clips
-#from moviepy.editor import *
-#from moviepy.video.VideoClip import VideoClip
-#from moviepy.Clip import Clip
+from moviepy.editor import *
+from moviepy.video.VideoClip import VideoClip
+from moviepy.Clip import Clip
 ##############################
 global INPUT_SIZE,LOG_ON,PROJ_DIR,NUM_CLASSES,CLIP_LENGTH,TEST_VIDEO_LOAD_PATH,TEST_VIDEOS
 global EVA_SAVE_PATH,EVA_SAVE_PATH_NO_AGGR
@@ -45,7 +45,6 @@ print "[Info] image_dim_order (from default ~/.keras/keras.json)={}".format(
 backend = dim_ordering
 log_path = os.path.join(PROJ_DIR,'logs_hy/')
 if not os.path.exists(log_path):
- print 'creating log_path'
  os.makedirs(log_path)
 str_log = ''
 
@@ -375,16 +374,11 @@ def main(model_name):
    gt_label = 0
   else:
    gt_label = 1
-  gt_anno_path_file = os.path.join(PROJ_DIR,'..','aggr_vids/gt_labels/gt_anno.txt')
-  print 'gt_anno path:',gt_anno_path_file
-  gt_frame_labels = collect_gt_labels(TEST_VIDEO,gt_anno_path_file)
+
+  gt_frame_labels = collect_gt_labels(TEST_VIDEO,'../aggr_vids/gt_labels/gt_anno.txt')
 
 
   cap = cv2.VideoCapture(TEST_VIDEO)
-  ret,test_frame = cap.read()
-  if not ret:
-   print 'check video file path:',TEST_VIDEO
-   break
   fps = cap.get(cv2.cv.CV_CAP_PROP_FPS)
   print 'frame per second:', fps
   vid, vid_view, pred_labels, view_interval, frame_i = [], [],[], 25, 0
@@ -435,7 +429,7 @@ def main(model_name):
     break
 
 
- #print 'last frame_i',frame_i,'vid len:',vid_len
+ print 'last frame_i',frame_i,'vid len:',vid_len
  print 'gt_labels:(len:',len(gt_frame_labels),') ',gt_frame_labels
  print 'pred_labels:(len:',len(pred_labels),') ',pred_labels
 
@@ -454,12 +448,12 @@ def main(model_name):
 
 if __name__ == '__main__':
   #model_name = 'k_01-0.46.hdf5'#offi
-  model_name = 'k_16_03_07-0.32' + '.hdf5'
+  model_name = 'k_16_03_06-0.11' + '.hdf5'
   #model_name = 'k_16_00000314_03-0.51best' + '.hdf5'
 
   CLIP_LENGTH = int(model_name.split('_')[1]) # 16
   v_dirs = sorted([s for s in os.listdir(TEST_VIDEO_LOAD_PATH) if '.' in s
-   and ('01_UBahn_S_0_6_T' in s)])  # hyhy
+   and ('04_Tschetschenischer_Tuersteher_140_147_T' in s)])  # hyhy
   # 01_fight_in_train_70_99_T
   # 03_Dog_lover_knocks_out_a_dog_abuser637_T.mp4
   # 2017-09-06_13.57.41.5.cam_55_4.event57_testF
@@ -473,7 +467,5 @@ if __name__ == '__main__':
    TEST_VIDEOS.append(v)
   # TEST_VIDEOS = TEST_VIDEOS[0:2]
   # TEST_VIDEO = PROJ_DIR+'test_videos/2017-09-06_event57F.mp4'
-  if not len(TEST_VIDEOS):
-   print 'check video file path'
-   exit(1)
+
   main(model_name)

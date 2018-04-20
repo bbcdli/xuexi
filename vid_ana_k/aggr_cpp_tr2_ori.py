@@ -1,4 +1,3 @@
-#source:internet
 import numpy as np
 import cv2
 import time
@@ -59,19 +58,19 @@ if __name__ == '__main__':
   except:
     fn = 0
   TEST_VIDEO_LOAD_PATH = os.path.join(PROJ_DIR, '..', 'aggr_vids/')
-  fn = os.path.join(TEST_VIDEO_LOAD_PATH,'04_sfw20110024_l_dark_F.mov')
+  fn = os.path.join(TEST_VIDEO_LOAD_PATH,'01_TschClubMBarGo.mp4')
   cam = cv2.VideoCapture(fn)
   ret, prev = cam.read()
 
   prevgray = cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY)
   show_hsv = False
-  show_glitch = True
+  show_glitch = False
   cur_glitch = prev.copy()
   frame_i = 0
   while True:
     ret, frame = cam.read()
     frame_i += 1
-    if ret and frame_i % 10 == 0:
+    if frame_i % 10 == 0:
       vis = frame.copy()
       gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
       flow = cv2.calcOpticalFlowFarneback(prevgray, gray, 0.5, 5, 15, 3, 5, 1.1, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
@@ -95,7 +94,7 @@ if __name__ == '__main__':
       if show_glitch:
         cur_glitch = warp_flow(cur_glitch, flow)
         cv2.imshow('glitch', cur_glitch)
-      k = 0xFF & cv2.waitKey(2)
+      k = 0xFF & cv2.waitKey(5)
       if k == 27: #faster than using ord'q'
         break
       if k == ord('1'):
@@ -106,6 +105,5 @@ if __name__ == '__main__':
         if show_glitch:
           cur_glitch = frame.copy()
         print 'glitch is', ['off', 'on'][show_glitch]
-    elif not ret:
-      break
+
 cv2.destroyAllWindows()
