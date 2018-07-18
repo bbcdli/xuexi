@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Train name="Ideenzug">
+    <MultifunctionArea>
+    <Number>1</Number>
+    <OccupationState>{{val}}</OccupationState>
+    <OccupationType>KINDERWAGEN</OccupationType>
+    </MultifunctionArea>
+</Train>

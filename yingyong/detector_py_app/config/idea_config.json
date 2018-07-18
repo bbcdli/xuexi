@@ -1,0 +1,5 @@
+{
+  "video":"rtsp://127.0.0.1:8554/",
+  "model":"/data/ssd_coco.pb"
+}
+

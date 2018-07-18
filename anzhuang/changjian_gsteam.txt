@@ -1,0 +1,66 @@
+sudo apt-get install -y libaprutil1-dev libglib2.0-dev libgoogle-glog-dev libgtk-3-dev libv4l-dev libtbb-dev libpomp-dev libgtk2.0-dev libopenblas-dev liblapack-dev gdebi ffmpeg ffmpeg2theora libavcodec-extra libavcodec-dev libavformat-dev libavresample-dev libavdevice-dev libavcodec-ffmpeg-extra56 yasm libges-1.0-dev libssl-dev gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav wget gstreamer1.0-plugins-*
+
+
+=====================================================================================
+-------------------------------------------------------------------------------------
+how to create streamer server to provide streaming and client to receive streaming
+
+1.open vlc to create sever
+select steaming from Media - Add video file - click Stream, click Next
+, drop-down RTSP, click Add, add port and path (must add path, eg default port 8554, path \aa, click Next,
+profile select video264.(mp4), click Next, click Stream
+2.receive stream
+
+gst-launch-1.0 rtspsrc location=rtsp://127.0.0.1:8554/aa ! decodebin ! autovideosink
+
+
+
+
+https://mobaxterm.mobatek.net/download-home-edition.html
+http://amin-ahmadi.com/cascade-trainer-gui/
+start server: sometimes need to select second option, include..
+
+
+setup env for aggr_cpp 1.version
+git checkout develop
+git submodule init               (submodule means there is submodule in this project)
+git submodule update --recursive  
+
+
+
+#make video
+#cmd
+ffmpeg -f image2 -r 1/5 -i comb_%d.png -vcodec mpeg4 -y movie.mp4
+ffmpeg -start_number 445 -framerate 4 -i final/filename_%06d.png -c:v libx264 -vf "fps=4,format=yuv420p" out.mp4
+
+
+#how to set tag for git repo
+#at current point v0.1
+git checkout tags/v0.1
+git push --set-upstream origin tags/v0.1_1
+#add tag v0.2
+git tag –a v0.2 –m “demo day”
+
+
+
+reading
+https://memememememememe.me/post/training-haar-cascades/
+http://www.irisa.fr/texmex/people/jain/w-Flow/motion_cvpr13.pdf
+
+
+//in c++ generate filename with filled 0
+
+#include <iomanip> //for setfill,setw
+
+stringstream filename; //hy
+
+        if (has_preview && cnt % 1 == 0) {//ori 5
+
+            filename << "filename_" << std::setw(6) << std::setfill('0') << cnt << ".png"; //hy
+
+        cv::imwrite(preview_folder + "/" + filename.str(), result);
+
+        }
+
+sudo apt-get remove kolourpaint4
+sudo apt-get install gwyddion
