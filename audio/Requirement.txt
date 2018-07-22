@@ -1,3 +1,5 @@
+www.analyticsvidhya.com/blog/2017/08/audio-voice-processing-deep-learning/
+
 python2.7
 
 sudo apt-get install portaudio19-dev
