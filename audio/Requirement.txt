@@ -1,0 +1,6 @@
+python2.7
+
+sudo apt-get install portaudio19-dev
+pip install pyaudio==0.2.11
+numpy
+pip install matplotlib
