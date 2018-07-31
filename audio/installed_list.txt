@@ -1,0 +1,50 @@
+2018.07.22
+sudo apt-get install python3-pip
+sudo pip3 install virtualenv 
+
+
+sudo apt purge python3-pyaudio
+sudo apt install portaudio19-dev python-all-dev
+sudo pip3 install pyaudio==0.2.9 --upgrade
+#or use current default version
+sudo pip3 install pyaudio     (which is 0.2.11)
+
+#but pyaudio not found after above installation
+
+==============================================
+mkdir p27
+virtualenv -p python2.7 p27
+sudo apt-get install portaudio19-dev
+pip install --allow-unverified=pyaudio pyaudio
+pip install matplotlib
+
+#without unverfied worked
+
+==============================================
+#inside p27 install jupyter
+sudo apt-get -y install ipython ipython-notebook
+pip install jupyter
+
+=======
+#how to use jupyter
+jupyter notebook
+#check http://localhost:8888
+#add new python script: New>python2
+#enable markdown: Cell>Cell Type>Markdown to write notes. Put equation between "$$...$$"
+
+#run CTRL+ENTER
+#run a python script
+run -i 'the_script.py'
+#%run -i '~/Documents/hy_dev/aggr/aggr_audio/get_realtime_input_html.py'
+
+#####
+#audiocity inside p27
+sudo add-apt-repository ppa:ubuntuhandbook1/audacity
+sudo apt update
+sudo apt install audacity
+
+========
+scipy
+pip install numpy scipy
+#https://github.com/marsbroshok/VAD-python/blob/master/detectVoiceInWave.py
+
