@@ -1,0 +1,10 @@
+#how to use jupyter
+jupyter notebook
+#check http://localhost:8888
+#add new python script: New>python2
+#enable markdown: Cell>Cell Type>Markdown to write notes. Put equation between "$$...$$"
+
+#run CTRL+ENTER
+#run a python script
+run -i 'the_script.py'
+#%run -i '~/Documents/hy_dev/aggr/aggr_audio/get_realtime_input_html.py'
