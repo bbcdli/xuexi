@@ -1,0 +1,59 @@
+#install python3
+? icctv_dev VM already installed
+
+
+#install numpy for python3
+sudo apt-get install python3-numpy
+
+
+https://askubuntu.com/questions/783956/how-to-install-opencv-3-1-for-python-3-5-on-ubuntu-16-04-lts?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
+sudo apt-get update
+sudo apt-get install build-essential cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev
+
+sudo apt-get install python3.5-dev
+sudo cp /usr/include/x86_64-linux-gnu/python3.5m/pyconfig.h /usr/include/python3.5m/
+git clone https://github.com/opencv/opencv.git
+if cannot clone, download the zip file
+
+create a tmp folder: tmp_opencv, unzip to tmp_opencv, change the folder name opencv-3.4 (or opencv) to opencv-3.
+create a folder 'build' beside opencv-3, go into 'build' and
+type 
+cmake -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=/usr/local ../opencv-3
+
+make
+
+
+sudo make install
+
+make -j8   #for using 8 cores
+
+
+######
+add to install opencv-contrib (will be needed if packages are patented)
+git clone https://github.com/opencv/opencv_contrib.git
+git checkout 3.4.1  #this version must be same as that of opencv installed, to check that version
+python3
+import cv2
+cv2.__version__
+
+
+######
+build opencv again
+
+go to tmp_opencv
+make backup of build folder: mv build build_old
+type
+cmake - DOPENCV_EXTRA_MODULES_PATH=<path_of_opencv_contrib>/moudles/xfeatures2d <path_of_opencv>
+example
+cmake - DOPENCV_EXTRA_MODULES_PATH=</home/x/opencv_contrib/moudles/xfeatures2d /home/x/tmp_opencv/opencv-3/
+
+(after moudules/ is the package that we want to use from opencv_contrib, the folder name can be found in "moudules")
+
+then same as building opencv, the rest
+
+make
+
+sudo make install
+
+make -j8
+

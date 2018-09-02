@@ -115,3 +115,7 @@ count unique
 
 # py
 print 'precision:{:.2f}'.format(a[0][0]/(a[0][0] + a[1][1]))
+
+
+#audio read
+https://github.com/scipy/scipy-cookbook/blob/master/ipython/SignalSmooth.ipynb

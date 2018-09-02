@@ -4,9 +4,9 @@
 #sudo apt-get install libhdf5-dev -y 
 #sudo apt-get install python-h5py -y 
 #sudo apt-get install ffmpeg -y 
-#pip install tensorflow==1.2 
+#pip install tensorflow==1.2 #1.5 also tested
 #pip install Pillow 
-#pip install keras==2.0.0 
+#pip install keras==2.1.5 #for c3d 
 #pip install matplotlib
 #
 #sudo apt-get install libprotobuf-dev libleveldb-dev libsnappy-dev libopencv-dev libhdf5-serial-dev protobuf-compiler -y
