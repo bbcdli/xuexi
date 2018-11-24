@@ -1,0 +1,6 @@
+model_checkpoint_path: "model_GD360_h184_w184_c6all_9_0.49-121"
+all_model_checkpoint_paths: "model_GD360_h184_w184_c6all_7_0.49-121"
+all_model_checkpoint_paths: "model_GD360_h184_w184_c6all_8_0.49-121"
+all_model_checkpoint_paths: "model_GD360_h184_w184_c6all_9_0.49-121"
+all_model_checkpoint_paths: "model_GD360_h184_w184_c6all_10_0.49-121"
+all_model_checkpoint_paths: "model_GD360_h184_w184_c6all_0_0.49-131"
