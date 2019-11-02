@@ -1,0 +1,13 @@
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/damaged/1.jpg 1
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/damaged/2.jpg 1
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/damaged/3.jpg 1
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/11.jpeg 0
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/110.jpeg 0
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/22.jpeg 0
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/33.jpeg 0
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/44.jpeg 0
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/55.jpeg 0
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/66.jpeg 0
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/77.jpeg 0
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/88.jpeg 0
+/home/hy/Documents/fenlei_tf/script_Jan26/data/train/good/99.jpeg 0

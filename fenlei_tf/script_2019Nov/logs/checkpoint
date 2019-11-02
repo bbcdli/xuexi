@@ -1,0 +1,6 @@
+model_checkpoint_path: "model_3conv_GD360_h184_w184_c2_b30_I_1.0-0"
+all_model_checkpoint_paths: "model_3conv_GD360_h184_w184_c2_b26_I_1.0-0"
+all_model_checkpoint_paths: "model_3conv_GD360_h184_w184_c2_b27_I_1.0-0"
+all_model_checkpoint_paths: "model_3conv_GD360_h184_w184_c2_b28_I_1.0-0"
+all_model_checkpoint_paths: "model_3conv_GD360_h184_w184_c2_b29_I_1.0-0"
+all_model_checkpoint_paths: "model_3conv_GD360_h184_w184_c2_b30_I_1.0-0"

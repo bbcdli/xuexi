@@ -1,0 +1,10 @@
+file list is created. /home/hy/Documents/fenlei_tf/script_Jan26/data/FileList.txt path /home/hy/Documents/fenlei_tf/script_Jan26/data/train/*/*
+Elapsed time: 0.97 s
+/home/hy/Documents/fenlei_tf/script_Jan26/data/FileList.txt True 1 0 angle 5 flip 0 0 0 0
+loading images in random order
+train size 36
+batch size 200
+Elapsed time2: 1.61 s
+
+Optimization Finished!
+Total elapsed time: 0.06 min
